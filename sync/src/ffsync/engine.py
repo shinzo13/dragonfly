@@ -395,14 +395,16 @@ class Core:
         for manifest in self.of_kind("matcher"):
             ctx = Ctx(self, manifest)
             try:
-                merges = self.modules[manifest.id].match(ctx, created)
+                merges = self.modules[manifest.id].match(ctx, created, self._recent(manifest, created))
             except Exception:
                 log.warning("[%s] %s", manifest.id, traceback.format_exc())
                 continue
+            merged: set[str] = set()
             for merge in merges:
                 out_m, in_m = self.manifest(merge.out.source), self.manifest(merge.into.source)
-                if not out_m or not in_m:
+                if not out_m or not in_m or {merge.out.firefly_id, merge.into.firefly_id} & merged:
                     continue
+                merged |= {merge.out.firefly_id, merge.into.firefly_id}
                 description = merge.description or f"{merge.out.tx.payee} → {merge.into.tx.payee}"
                 new_id = self.firefly.transfer(
                     merge.out.tx,
@@ -415,6 +417,52 @@ class Core:
                 for part in (merge.out, merge.into):
                     self.firefly.delete(part.firefly_id)
                     self.store.remember(part.tx.external_id, new_id, part.source)
+
+    def _recent(self, matcher: Manifest, created: list[Stored]) -> list[Stored]:
+        """Unmerged single-split withdrawals and deposits the core wrote in the last lookback_days, read back from Firefly."""
+        if not matcher.lookback_days:
+            return []
+        fresh = {s.firefly_id for s in created}
+        cutoff = (datetime.now(UTC) - timedelta(days=matcher.lookback_days)).isoformat(timespec="seconds")
+        out: list[Stored] = []
+        for row in self.store.all(
+            """select firefly_id, external_id, source, max(at) from written
+               where at >= ? group by firefly_id""",
+            cutoff,
+        ):
+            source = self.manifest(row["source"])
+            if row["firefly_id"] in fresh or not source:
+                continue
+            try:
+                group = self.firefly.get(f"/v1/transactions/{row['firefly_id']}")["data"]
+            except FireflyError:
+                continue
+            splits = group["attributes"]["transactions"]
+            split = splits[0]
+            if split["type"] not in ("withdrawal", "deposit") or len(splits) > 1:
+                continue
+            side = "debit" if split["type"] == "withdrawal" else "credit"
+            mine = split["source_id"] if side == "debit" else split["destination_id"]
+            key = next((k for k, a in source.accounts.items() if a["firefly_id"] == mine), None)
+            if key is None:
+                continue
+            tx = Tx(
+                external_id=row["external_id"],
+                account=key,
+                side=side,
+                amount=Decimal(split["amount"]),
+                currency=split["currency_code"],
+                booked=date.fromisoformat(split["date"][:10]),
+                payee=(split["destination_name"] if side == "debit" else split["source_name"]) or "",
+                description=split["description"],
+                foreign_amount=Decimal(split["foreign_amount"]) if split.get("foreign_amount") else None,
+                foreign_currency=split.get("foreign_currency_code"),
+                category=split.get("category_name"),
+                notes=split.get("notes"),
+            )
+            provisional = bool(self.store.one("select 1 from provisional where firefly_id = ? and open = 1", row["firefly_id"]))
+            out.append(Stored(tx=tx, source=source.id, firefly_id=row["firefly_id"], provisional=provisional))
+        return out
 
     def _expire(self) -> None:
         for manifest in self.of_kind("source"):

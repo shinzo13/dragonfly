@@ -72,6 +72,8 @@ plugins, data = tmp / "plugins", tmp / "data"
                 return Batch(final=legacy + [
                     Tx(external_id="demo:1", account="main", side="debit", amount=Decimal("30"), currency="PLN",
                        booked=today - timedelta(days=3), payee="Kaufland 2084", description="Kaufland"),
+                Tx(external_id="demo:out", account="main", side="debit", amount=Decimal("10"), currency="PLN",
+                   booked=today - timedelta(days=4), payee="Paysend", description="to ton"),
                 Tx(external_id="demo:ton:1", account="ton", side="credit", amount=Decimal("1.5"), currency="GRAM",
                    booked=today - timedelta(days=3), payee="mrkt.ton", description="mrkt"),
                 ], provisional=[pending])
@@ -80,9 +82,25 @@ plugins, data = tmp / "plugins", tmp / "data"
                    booked=today - timedelta(days=1), payee="ZABKA Z0004", description="ZABKA settled"),
                 Tx(external_id="demo:1", account="main", side="debit", amount=Decimal("30"), currency="PLN",
                    booked=today - timedelta(days=3), payee="Kaufland 2084", description="Kaufland"),
+                Tx(external_id="demo:in", account="ton", side="credit", amount=Decimal("2"), currency="GRAM",
+                   booked=today - timedelta(days=1), payee="Paysend", description="from main"),
             ], balances=[Balance(account="main", amount=Decimal("50.00"), currency="PLN", at=datetime.now(UTC))])
 
     plugin = Demo()
+"""))
+(plugins / "pair").mkdir()
+(plugins / "pair" / "manifest.toml").write_text('id = "pair"\nname = "Pair"\nkind = "matcher"\n[match]\nlookback_days = 14\n')
+(plugins / "pair" / "plugin.py").write_text(textwrap.dedent("""
+    from ffsync.api import Merge
+
+    class Pair:
+        def match(self, ctx, fresh, recent):
+            pool = [s for s in fresh + recent if s.tx.payee == "Paysend"]
+            outs = [s for s in pool if s.tx.side == "debit"]
+            ins = [s for s in pool if s.tx.side == "credit"]
+            return [Merge(out=o, into=i) for o in outs for i in ins]
+
+    plugin = Pair()
 """))
 step_file = tmp / "step"
 import os
@@ -117,12 +135,13 @@ try:
     print("questions", [dict(q) for q in core.store.all("select type, text from questions")])
     s1, s2 = r1.sources[0], r2.sources[0]
     checks = {
-        "run1 created 3 (incl GRAM)": s1.created == 3,
+        "run1 created 4 (incl GRAM)": s1.created == 4,
         "legacy final and split receipt skipped": s1.skipped == 2,
         "legacy pending settled by new final": s1.settled == 1,
-        "GRAM balance": ff.account_balance(gram) == Decimal("1.5"),
-        "run2 settled 1, skipped 2": s2.settled == 1 and s2.skipped == 2 and s2.created == 0,
-        "6 groups total incl opening and receipt": len(txs) == 6,
+        "GRAM balance incl transfer": ff.account_balance(gram) == Decimal("3.5"),
+        "transfer merged across runs": [(f[0], f[2]) for f in flat if f[0] == "Paysend → Paysend"] == [("Paysend → Paysend", "demo:out+demo:in")],
+        "run2 settled 1, skipped 2, created 1": s2.settled == 1 and s2.skipped == 2 and s2.created == 1,
+        "7 groups total incl opening, receipt, transfer": len(txs) == 7,
         "pending got the final id": any(f[2] == "demo:2" for f in flat),
         "balance gap asked": len(core.store.all("select 1 from questions where type='unexplained_gap'")) == 1,
         "budget counted": core.store.used_today("demo") == 2,

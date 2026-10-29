@@ -166,7 +166,7 @@ class Auth(Protocol):
 
 
 class Matcher(Protocol):
-    def match(self, ctx: Context, fresh: list[Stored]) -> list[Merge]: ...
+    def match(self, ctx: Context, fresh: list[Stored], recent: list[Stored]) -> list[Merge]: ...
 
 
 class Enricher(Protocol):

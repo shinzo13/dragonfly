@@ -31,6 +31,7 @@ settle_days = 3                 # a final may arrive up to N days after its prov
 expire_days = 10                # unsettled provisional becomes a stale_provisional question
 payee_prefix = "first_word"     # first_word | full | none
 gap_tolerance = "0.01"          # balance gaps up to this are ignored; TON wants "0.000001"
+lookback_days = 14              # matcher only: how far back `recent` reaches
 
 [accounts]                      # source only: what this source feeds
 erste = { firefly_id = "1", currency = "PLN" }
@@ -117,7 +118,7 @@ class Auth(Protocol):                       # sources with [auth] type = "oauth_
     def finish(self, ctx: Context, params: dict[str, str]) -> datetime: ...  # stores tokens via ctx, returns expiry
 
 class Matcher(Protocol):                    # runs after all sources of a run
-    def match(self, ctx: Context, fresh: list["Stored"]) -> list["Merge"]: ...
+    def match(self, ctx: Context, fresh: list["Stored"], recent: list["Stored"]) -> list["Merge"]: ...
 
 class Enricher(Protocol):                   # runs on every new or updated transaction
     def enrich(self, ctx: Context, tx: "Stored") -> "Patch | None": ...
@@ -128,7 +129,7 @@ class Hook(Protocol):                       # runs once at the end of a run
 
 Hooks also get `ctx.write`, a narrow writer: `set_rate`, `piggy_add`, `set_budget`. Every other kind gets `ctx.write = None`. `Patch` carries `category`, `tags`, `notes`, `splits`, `description`, `budget` (a budget name) and `booked` (moves the date, for receipts). The core resolves every currency code to a Firefly `currency_id`, so codes longer than three letters (GRAM) work. `ctx.since` is a hint; a source that needs its own window (Erste, 10 days) computes it from `ctx.cursor`.
 
-`Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `Merge` (with optional `booked`, else the earlier date of the two) tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
+`Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `fresh` is what this run created; `recent` is what the core wrote in the last `lookback_days` (0 = none), not yet merged, read back from Firefly so manual edits show. Both halves of a transfer rarely land in one run (Erste books PayPal and Paysend 1-4 days late), so a matcher pairs `fresh` against `fresh + recent`. Groups older than the switch to the core are not in `recent`. A transaction used by two merges is merged once. `Merge` (with optional `booked`, else the earlier date of the two) tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
 
 ## What the core does with a batch
 
