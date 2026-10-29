@@ -1,11 +1,11 @@
 # Firefly sync: plugin interface
 
-Draft 1, 2026-10-29. Nothing here is built yet.
+Version 1, 2026-10-29. The code is the source of truth: `src/ffsync/api.py`. Nothing here is built yet.
 
 ## Pieces
 
 - **core**: one Python service in its own container, in the same compose as Firefly. Owns the scheduler, the request budget, deduplication, matching of provisional transactions, the question queue, the state database (`sqlite`) and the HTTP API the UI talks to. The only thing that writes to Firefly.
-- **plugins**: Python packages under `plugins/<id>/`, each with `manifest.toml` and `plugin.py`. Four kinds: `source`, `matcher`, `enricher`, `hook`. Plugins never call the Firefly API to write; they return data and the core applies it.
+- **plugins**: folders with `manifest.toml` and `plugin.py`, in any directory the core is pointed at (`FFSYNC_PLUGINS`). Bank plugins live in a private repo, the core repo ships only `examples/`. `plugin.py` defines `plugin`, an instance with the methods of its kind. Four kinds: `source`, `matcher`, `enricher`, `hook`. Plugins never call the Firefly API to write; they return data and the core applies it.
 - **UI**: the Sync tab. Talks to the core through `/sync/*`, proxied by the UI server.
 
 ## Manifest
@@ -20,6 +20,7 @@ icon = "landmark"               # lucide name, or a file next to the manifest: "
 [schedule]
 cron = "0 5 * * *"              # UTC; absent means: only when the core or a human starts it
 after = []                      # ids that must finish first in the same run (matchers, hooks)
+phase = "after"                 # hooks only: "before" runs ahead of the sources (exchange rates)
 
 [budget]                        # source only
 requests_per_day = 4
@@ -121,6 +122,8 @@ class Enricher(Protocol):                   # runs on every new or updated trans
 class Hook(Protocol):                       # runs once at the end of a run
     def run(self, ctx: Context, report: "RunReport") -> None: ...
 ```
+
+Hooks also get `ctx.write`, a narrow writer: `set_rate`, `piggy_add`, `set_budget`. Every other kind gets `ctx.write = None`. `Patch` carries `category`, `tags`, `notes`, `splits`, `description`, `budget` (a budget name) and `booked` (moves the date, for receipts). The core resolves every currency code to a Firefly `currency_id`, so codes longer than three letters (GRAM) work. `ctx.since` is a hint; a source that needs its own window (Erste, 10 days) computes it from `ctx.cursor`.
 
 `Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `Merge` tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
 
