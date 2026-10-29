@@ -179,23 +179,25 @@ class Firefly:
         body = {"accounts": [{"account_id": slot["account_id"], "current_amount": _money(current + amount)}]}
         self._call("PUT", f"/v1/piggy-banks/{piggy_id}", json=body)
 
-    def set_budget(self, firefly_id: str, budget: str) -> None:
-        body = {
-            "transactions": [
-                {"transaction_journal_id": j["transaction_journal_id"], "budget_name": budget}
-                for j in self.journals(firefly_id)
-            ]
-        }
+    def _update_splits(self, firefly_id: str, fields) -> None:
+        """PUT the group with fields(journal) merged into each split; split groups need their title back."""
+        group = self.get(f"/v1/transactions/{firefly_id}")["data"]["attributes"]
+        parts = [{"transaction_journal_id": j["transaction_journal_id"]} | fields(j) for j in group["transactions"]]
+        body: dict[str, Any] = {"transactions": parts}
+        if len(parts) > 1:
+            body["group_title"] = group.get("group_title") or group["transactions"][0]["description"]
         self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
 
+    def set_budget(self, firefly_id: str, budget: str, journals: list[str] | None = None) -> None:
+        """Budget on every split of the group, or only on the given transaction_journal_ids."""
+        wanted = None if journals is None else {str(j) for j in journals}
+        self._update_splits(
+            firefly_id,
+            lambda j: {"budget_name": budget} if wanted is None or str(j["transaction_journal_id"]) in wanted else {},
+        )
+
     def set_category(self, firefly_id: str, category: str) -> None:
-        body = {
-            "transactions": [
-                {"transaction_journal_id": j["transaction_journal_id"], "category_name": category}
-                for j in self.journals(firefly_id)
-            ]
-        }
-        self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
+        self._update_splits(firefly_id, lambda j: {"category_name": category})
 
     def delete(self, firefly_id: str) -> None:
         self._call("DELETE", f"/v1/transactions/{firefly_id}")
