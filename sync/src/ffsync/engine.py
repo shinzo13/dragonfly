@@ -186,6 +186,8 @@ class Core:
             return SourceResult(source=manifest.id, ok=False, error=blocked)
         ctx = Ctx(self, manifest)
         try:
+            if self.store.setting(manifest.id, "__seeded") is None:
+                self._seed(manifest)
             batch: Batch = self.modules[manifest.id].fetch(ctx)
             for tx in batch.final:
                 self._final(manifest, tx, result, report)
@@ -203,6 +205,42 @@ class Core:
                 self.store.run("insert or replace into auth values (?, ?)", manifest.id, now())
         return result
 
+    def _seed(self, manifest: Manifest) -> None:
+        """First run of a source: learn what is already in Firefly, so nothing is written twice."""
+        horizon = (date.today() - timedelta(days=max(manifest.expire_days, 40))).isoformat()
+        for account in manifest.accounts.values():
+            for group in self.firefly.all(f"/v1/accounts/{account['firefly_id']}/transactions", start=horizon, end=date.today().isoformat()
+            ):
+                split = group["attributes"]["transactions"][0]
+                external = split.get("external_id")
+                if not external:
+                    continue
+                self.store.run("insert or ignore into seen values (?, ?, ?)", external, group["id"], manifest.id)
+                prefix = manifest.provisional_prefix
+                if prefix and external.startswith(prefix):
+                    side = "debit" if split["source_id"] == account["firefly_id"] else "credit"
+                    payee = split.get("destination_name") if side == "debit" else split.get("source_name")
+                    self.store.run(
+                        "insert or ignore into provisional values (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                        group["id"],
+                        manifest.id,
+                        account["firefly_id"],
+                        side,
+                        str(sum(Decimal(s["amount"]) for s in group["attributes"]["transactions"]).normalize()),
+                        payee or "",
+                        split["date"][:10],
+                        external,
+                    )
+        self.store.set_setting(manifest.id, "__seeded", now())
+        log.info("[%s] seeded from Firefly", manifest.id)
+
+    def _known(self, manifest: Manifest, tx: Tx) -> bool:
+        if self.store.written(tx.external_id):
+            return True
+        legacy = getattr(self.modules[manifest.id], "legacy_ids", None)
+        ids = [tx.external_id, *(legacy(tx) if legacy else [])]
+        return any(self.store.one("select 1 from seen where external_id = ?", i) for i in ids)
+
     def _account(self, manifest: Manifest, key: str) -> str:
         account = manifest.accounts.get(key)
         if not account:
@@ -218,7 +256,7 @@ class Core:
         return tx
 
     def _final(self, manifest: Manifest, tx: Tx, result: SourceResult, report: RunReport) -> None:
-        if self.store.written(tx.external_id):
+        if self._known(manifest, tx):
             result.skipped += 1
             return
         open_one = self._find_provisional(manifest, tx)
@@ -257,7 +295,7 @@ class Core:
         return None
 
     def _provisional(self, manifest: Manifest, tx: Tx, result: SourceResult, report: RunReport) -> None:
-        if self.store.written(tx.external_id):
+        if self._known(manifest, tx):
             result.skipped += 1
             return
         account_id = self._account(manifest, tx.account)

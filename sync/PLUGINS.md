@@ -176,6 +176,10 @@ One queue in the core, shown in the UI. Telegram only notifies, with a link into
 
 `written(external_id, firefly_id, source, at)`, `provisional(firefly_id, source, account, side, amount, payee, booked, open)`, `budget(source, day, used)`, `runs(id, started, finished, ok, report_json)`, `rules(payee, category)`, `questions(id, type, payload_json, created, answered, answer_json)`, `cursors(source, cursor)`, `auth(source, expires_at)`.
 
+## Switching from the old scripts
+
+On the first run of a source the core seeds itself from Firefly: it reads the transactions of every account in `[accounts]` for the last `max(expire_days, 40)` days and remembers their `external_id`s. A source that changed its id format defines `legacy_ids(tx) -> list[str]` returning the old ids of a transaction (Mono: the bare operation id); the core skips a transaction when any of them is already in Firefly. Old pending blocks become open provisionals when their `external_id` starts with `[migrate] provisional_prefix` (`"pdng:"` for Erste), so the first real booking settles them instead of creating a twin.
+
 ## Migration
 
 Nothing on prod changes until approved. Order once approved:

@@ -62,6 +62,11 @@ create table if not exists cursors (
   last_run text,
   last_ok text
 );
+create table if not exists seen (
+  external_id text primary key,
+  firefly_id text not null,
+  source text not null
+);
 create table if not exists auth (
   source text primary key,
   expires_at text

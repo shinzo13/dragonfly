@@ -44,6 +44,7 @@ class Manifest:
     accounts: dict[str, dict[str, str]] = field(default_factory=dict)
     settings: list[Setting] = field(default_factory=list)
     auth: str = "none"
+    provisional_prefix: str | None = None
 
     @property
     def secrets(self) -> list[str]:
@@ -87,6 +88,7 @@ def load_manifest(folder: Path) -> Manifest:
     manifest.accounts = {key: {k: str(v) for k, v in value.items()} for key, value in raw.get("accounts", {}).items()}
     manifest.settings = [Setting(**s) for s in raw.get("settings", [])]
     manifest.auth = raw.get("auth", {}).get("type", "none")
+    manifest.provisional_prefix = raw.get("migrate", {}).get("provisional_prefix")
     if kind == "source" and not manifest.accounts:
         raise ManifestError(f"{manifest.id}: a source needs [accounts]")
     return manifest

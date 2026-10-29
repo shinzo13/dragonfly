@@ -36,6 +36,8 @@ plugins, data = tmp / "plugins", tmp / "data"
     [match]
     settle_days = 3
     expire_days = 10
+    [migrate]
+    provisional_prefix = "pdng:"
     [accounts]
     main = {{ firefly_id = "{acc}", currency = "PLN" }}
     ton = {{ firefly_id = "{gram}", currency = "GRAM" }}
@@ -49,14 +51,23 @@ plugins, data = tmp / "plugins", tmp / "data"
     STEP = os.environ["SMOKE_STEP_FILE"]
 
     class Demo:
+        def legacy_ids(self, tx):
+            return [tx.external_id.removeprefix("demo:")]
+
         def fetch(self, ctx):
             ctx.spend()
             step = int(open(STEP).read())
             today = date.today()
             pending = Tx(external_id="demo:pending:1", account="main", side="debit", amount=Decimal("12.50"),
                          currency="PLN", booked=today - timedelta(days=2), payee="ZABKA Z4560 K.1", description="Zabka")
+            legacy = [
+                Tx(external_id="demo:legacy-1", account="main", side="debit", amount=Decimal("5"), currency="PLN",
+                   booked=today - timedelta(days=5), payee="Old shop", description="old, already in Firefly"),
+                Tx(external_id="demo:3", account="main", side="debit", amount=Decimal("7.5"), currency="PLN",
+                   booked=today - timedelta(days=3), payee="LIDL 112", description="Lidl"),
+            ]
             if step == 1:
-                return Batch(final=[
+                return Batch(final=legacy + [
                     Tx(external_id="demo:1", account="main", side="debit", amount=Decimal("30"), currency="PLN",
                        booked=today - timedelta(days=3), payee="Kaufland 2084", description="Kaufland"),
                 Tx(external_id="demo:ton:1", account="ton", side="credit", amount=Decimal("1.5"), currency="GRAM",
@@ -74,6 +85,12 @@ plugins, data = tmp / "plugins", tmp / "data"
 step_file = tmp / "step"
 import os
 os.environ["SMOKE_STEP_FILE"] = str(step_file)
+
+from ffsync.api import Tx as _Tx
+old_1 = ff.create(_Tx(external_id="legacy-1", account="main", side="debit", amount=Decimal("5"), currency="PLN",
+                      booked=date.today() - timedelta(days=5), payee="Old shop", description="old"), acc)
+old_pending = ff.create(_Tx(external_id="pdng:9", account="main", side="debit", amount=Decimal("7.50"), currency="PLN",
+                      booked=date.today() - timedelta(days=4), payee="LIDL 9", description="old pending"), acc)
 
 core = Core(plugins, data, ff)
 assert not core.errors, core.errors
@@ -94,9 +111,11 @@ try:
     s1, s2 = r1.sources[0], r2.sources[0]
     checks = {
         "run1 created 3 (incl GRAM)": s1.created == 3,
+        "legacy final skipped": s1.skipped == 1,
+        "legacy pending settled by new final": s1.settled == 1,
         "GRAM balance": ff.account_balance(gram) == Decimal("1.5"),
         "run2 settled 1, skipped 1": s2.settled == 1 and s2.skipped == 1 and s2.created == 0,
-        "3 transactions total incl opening": len(txs) == 3,
+        "5 transactions total incl opening": len(txs) == 5,
         "pending got the final id": any(f[2] == "demo:2" for f in flat),
         "balance gap asked": len(core.store.all("select 1 from questions where type='unexplained_gap'")) == 1,
         "budget counted": core.store.used_today("demo") == 2,
