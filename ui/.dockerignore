@@ -1,0 +1,7 @@
+node_modules
+.svelte-kit
+build
+# .env goes into the build: $env/static/public (and static/private) are
+# inlined at build time from it. It stays in the builder stage, the runtime
+# image gets build/ only. Local overrides (.env.local and the like) stay out.
+.env.*

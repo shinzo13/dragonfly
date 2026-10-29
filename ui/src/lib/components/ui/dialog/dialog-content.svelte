@@ -1,0 +1,45 @@
+<script lang="ts">
+  import { Dialog as DialogPrimitive } from "bits-ui";
+  import DialogPortal from "./dialog-portal.svelte";
+  import XIcon from "@lucide/svelte/icons/x";
+  import type { Snippet } from "svelte";
+  import * as Dialog from "./index.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
+  import type { ComponentProps } from "svelte";
+
+  let {
+    ref = $bindable(null),
+    class: className,
+    portalProps,
+    children,
+    showCloseButton = true,
+    ...restProps
+  }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
+    portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
+    children: Snippet;
+    showCloseButton?: boolean;
+  } = $props();
+</script>
+
+<DialogPortal {...portalProps}>
+  <Dialog.Overlay />
+  <DialogPrimitive.Content
+    bind:ref
+    data-slot="dialog-content"
+    class={cn(
+      "cladd-surface cladd-gradient cladd-outline cladd-level-1 cladd-anim-dialog fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-cladd-dialog p-4 text-cladd-fg shadow-cladd-popover outline-none sm:max-w-lg",
+      className
+    )}
+    {...restProps}
+  >
+    {@render children?.()}
+    {#if showCloseButton}
+      <DialogPrimitive.Close
+        class="cladd-ghost cladd-hoverable cladd-clickable cladd-focusable absolute end-3 top-3 flex size-cladd-md items-center justify-center rounded-full text-cladd-fg-soft disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+      >
+        <XIcon />
+        <span class="sr-only">Close</span>
+      </DialogPrimitive.Close>
+    {/if}
+  </DialogPrimitive.Content>
+</DialogPortal>

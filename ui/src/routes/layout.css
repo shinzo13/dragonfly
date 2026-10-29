@@ -1,0 +1,149 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+
+@import "./claddcn.css";
+@import "@fontsource-variable/inter/index.css";
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --ff-brand: oklch(0.6 0.1 240);
+  --ff-brand-deep: oklch(0.52 0.095 240);
+  --ff-on-brand: oklch(0.995 0 0);
+  --ff-income: oklch(0.53 0.14 152);
+  --ff-expense: oklch(0.56 0.18 30);
+  --ff-transfer: oklch(0.52 0.1 240);
+  --ff-warn: oklch(0.6 0.14 65);
+  --ff-row-hover: oklch(0.965 0.01 240);
+  --ff-row-cursor: oklch(0.93 0.03 240);
+  --ff-row-selected: oklch(0.9 0.05 240);
+  --ff-series-1: #1777b8;
+  --ff-series-2: #cb6620;
+  --ff-series-3: #008f7d;
+  --ff-series-4: #b08000;
+  --ff-series-5: #bc4b87;
+  --ff-series-6: #3f842e;
+  --ff-series-7: #6b4cae;
+  --ff-series-8: #b63132;
+}
+
+:root:not(.dark) {
+  --cladd-bg: oklch(0.95 0.008 240);
+  --cladd-surface: oklch(1 0 0);
+  --cladd-surface-cut: oklch(0.955 0.005 240);
+  --cladd-bg-outline: oklch(0.87 0.008 240);
+  --cladd-outline: oklch(0.89 0.008 240);
+  --cladd-fg: oklch(0.22 0.01 250);
+  --cladd-fg-soft: oklch(0.42 0.012 250);
+  --cladd-fg-softer: oklch(0.55 0.012 250);
+  --cladd-fg-softest: oklch(0.7 0.01 250);
+  --ring: var(--ff-brand);
+}
+
+.cladd-color-brand {
+  --cladd-theme: #3c8dbc;
+}
+
+.dark {
+  --cladd-bg: oklch(0.2 0.012 250);
+  --cladd-surface: oklch(0.25 0.014 250);
+  --cladd-surface-cut: oklch(0.215 0.012 250);
+  --cladd-bg-outline: oklch(0.3 0.014 250);
+  --cladd-outline: oklch(0.34 0.016 250);
+  --cladd-fg: oklch(0.96 0.004 250);
+  --cladd-fg-soft: oklch(0.8 0.01 250);
+  --cladd-fg-softer: oklch(0.67 0.012 250);
+  --cladd-fg-softest: oklch(0.52 0.012 250);
+  --ring: var(--ff-series-1);
+  --ff-brand: oklch(0.5 0.1 240);
+  --ff-brand-deep: oklch(0.44 0.09 240);
+  --ff-on-brand: oklch(0.995 0 0);
+  --ff-income: oklch(0.77 0.17 152);
+  --ff-expense: oklch(0.72 0.17 28);
+  --ff-transfer: oklch(0.77 0.1 235);
+  --ff-warn: oklch(0.82 0.14 80);
+  --ff-row-hover: oklch(0.29 0.014 250);
+  --ff-row-cursor: oklch(0.32 0.035 245);
+  --ff-row-selected: oklch(0.36 0.06 245);
+  --ff-series-1: #4a9ad6;
+  --ff-series-2: #e0834a;
+  --ff-series-3: #1fae9a;
+  --ff-series-4: #c99d2a;
+  --ff-series-5: #d872a6;
+  --ff-series-6: #5ea84d;
+  --ff-series-7: #9580d6;
+  --ff-series-8: #d65a55;
+}
+
+@theme inline {
+  --font-sans:
+    "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --color-brand: var(--ff-brand);
+  --color-brand-deep: var(--ff-brand-deep);
+  --color-on-brand: var(--ff-on-brand);
+  --color-income: var(--ff-income);
+  --color-expense: var(--ff-expense);
+  --color-transfer: var(--ff-transfer);
+  --color-warn: var(--ff-warn);
+  --color-row-hover: var(--ff-row-hover);
+  --color-row-cursor: var(--ff-row-cursor);
+  --color-row-selected: var(--ff-row-selected);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    scroll-padding-top: 3.75rem;
+    scroll-padding-bottom: 0.75rem;
+    scrollbar-color: var(--cladd-fg-softest) transparent;
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+    line-height: 1.45;
+    @apply bg-background text-foreground;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--ff-brand) 28%, transparent);
+  }
+  :focus-visible {
+    outline: 1.5px solid var(--ff-brand);
+    outline-offset: 1px;
+  }
+  .dark :focus-visible {
+    outline-color: var(--ff-series-1);
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@utility kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--cladd-fg-soft);
+  background: var(--cladd-surface-cut);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--cladd-outline);
+}
+
+.dark .text-brand {
+  color: var(--ff-series-1);
+}

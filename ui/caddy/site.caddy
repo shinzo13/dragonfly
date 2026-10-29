@@ -1,0 +1,5 @@
+{$FIREFLY_UI_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy firefly-ui-frontend:3000
+}

@@ -1,0 +1,68 @@
+name: ffui-stand
+
+x-firefly-env: &firefly-env
+  APP_ENV: local
+  APP_DEBUG: "false"
+  SITE_OWNER: stand@ffui.local
+  DB_CONNECTION: sqlite
+  TZ: Europe/Warsaw
+  TRUSTED_PROXIES: "**"
+  DEFAULT_LANGUAGE: en_US
+  DEFAULT_LOCALE: en_GB
+  STATIC_CRON_TOKEN: ffuistandcronffuistandcron123456
+
+services:
+  v1:
+    image: fireflyiii/core:version-6.6.6@sha256:ae69fdd95cdef9038cd7a460a5aec731f14813973e4f096511d5a4ea9ff0e972
+    environment:
+      <<: *firefly-env
+      APP_KEY: ffuistandv1ffuistandv1ffuistand1
+      APP_URL: http://localhost:${FFUI_V1_PORT:-30072}
+      FIREFLY_III_LAYOUT: v1
+    volumes:
+      - v1_db:/var/www/html/storage/database
+      - v1_upload:/var/www/html/storage/upload
+    ports:
+      - "127.0.0.1:${FFUI_V1_PORT:-30072}:8080"
+
+  v3:
+    image: fireflyiii/core:latest@sha256:4409f9f0f87378ba95d40811352f4f49338d276bb638c1e6d18a5579f332fbe8
+    environment:
+      <<: *firefly-env
+      APP_KEY: ffuistandv3ffuistandv3ffuistand3
+      APP_URL: http://localhost:${FFUI_V3_PORT:-40869}
+    volumes:
+      - v3_db:/var/www/html/storage/database
+      - v3_upload:/var/www/html/storage/upload
+    ports:
+      - "127.0.0.1:${FFUI_V3_PORT:-40869}:8080"
+    networks:
+      default:
+        aliases:
+          - firefly_iii_app
+
+  frontend:
+    profiles: [prodlike]
+    build: ..
+    image: ffui-stand/frontend
+    networks:
+      default:
+        aliases:
+          - firefly-ui-frontend
+
+  caddy:
+    profiles: [prodlike]
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+    environment:
+      FIREFLY_DOMAIN: ":8080"
+    volumes:
+      - ./prodlike/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../caddy/fireflyiii.site.caddy:/etc/caddy/fireflyiii.site.caddy:ro
+    ports:
+      - "127.0.0.1:${FFUI_PROD_PORT:-34351}:8080"
+
+volumes:
+  v1_db:
+  v1_upload:
+  v3_db:
+  v3_upload:

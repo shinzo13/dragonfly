@@ -1,0 +1,9 @@
+_commit: v0.6.0
+_src_path: https://git.kotikot.com/templates/infra.git
+init_git: true
+layout: single
+mcp_servers:
+- context7
+- svelte
+project_description: Keyboard-first SvelteKit client for Firefly III
+project_name: Firefly UI

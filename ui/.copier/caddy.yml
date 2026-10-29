@@ -1,0 +1,5 @@
+_commit: v0.1.4
+_src_path: https://git.kotikot.com/templates/caddy.git
+project_slug: firefly_ui
+routes:
+- frontend

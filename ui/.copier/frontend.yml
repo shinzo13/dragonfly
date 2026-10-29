@@ -1,0 +1,9 @@
+_commit: v0.7.0
+_src_path: https://git.kotikot.com/templates/frontend-svelte.git
+install_deps: true
+layout: root
+linter: biome
+project_name: Firefly UI
+project_slug: firefly_ui
+serve: static
+ui_library: shadcn

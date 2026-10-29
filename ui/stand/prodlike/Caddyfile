@@ -1,0 +1,13 @@
+{
+	admin off
+	auto_https off
+}
+
+(cf_tls) {
+}
+
+(compress) {
+	encode zstd gzip
+}
+
+import /etc/caddy/fireflyiii.site.caddy

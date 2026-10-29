@@ -1,0 +1,18 @@
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
+.DS_Store
+.idea
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+sessions/*.session*
+node_modules/
+.svelte-kit/
+/build/
+
+# Local playground
+/t/

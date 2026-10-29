@@ -1,0 +1,52 @@
+# Firefly III with the custom UI on top. The UI serves its assets and pages on
+# GET/HEAD; everything else (API, login, MFA, OAuth, cron, non-GET requests, pages
+# the UI lacks) goes to Firefly. scripts/caddy-matcher.ts generates the path list
+# from src/lib/spa-paths.ts. If the UI is down, pages fall through to Firefly
+# (second upstream, lb_policy first).
+#
+# Switch on any address:
+#   ?ffui=old  this request only, old UI, no cookie
+#   ?ffui=off  old UI until the browser session ends (cookie ffui=off)
+#   ?ffui=on   clear the cookie, new UI again
+{$FIREFLY_DOMAIN} {
+	import cf_tls
+	import compress
+
+	@ffui_off query ffui=off
+	header @ffui_off Set-Cookie "ffui=off; Path=/; Secure; HttpOnly; SameSite=Lax"
+	@ffui_on query ffui=on
+	header @ffui_on Set-Cookie "ffui=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+
+	@ffui_assets path /_app/* /favicon.svg /manifest.webmanifest /icon-192.png /icon-512.png
+	handle @ffui_assets {
+		reverse_proxy firefly-ui-frontend:3000
+	}
+
+	@ffui_pages {
+		method GET HEAD
+		path / /home /accounts /budgets /categories /tags
+		path /bills /subscriptions /piggy-banks /groups /reports /search
+		path /currencies /exchange-rates /attachments /preferences /export /administrations
+		path /recurring /webhooks/index /settings/links /settings/links/create /accounts/* /inactive-accounts/*
+		path /transactions/* /budgets/* /categories/* /tags/* /bills/* /subscriptions/*
+		path /piggy-banks/* /groups/* /reports/* /currencies/* /exchange-rates/* /attachments/*
+		path /administrations/* /recurring/show/* /webhooks/show/* /settings/links/show/* /settings/links/edit/*
+		not path /attachments/download/* /attachments/view/* /transactions/convert/* /transactions/debug/* /transactions/link/* /transactions/mass/*
+		not path /transactions/bulk/* /transactions/show-by-journal/* /piggy-banks/add/* /piggy-banks/remove/* /reports/options/*
+		not expression `{query.ffui} in ["off", "old"] || ({cookie.ffui} == "off" && {query.ffui} != "on")`
+	}
+	handle @ffui_pages {
+		reverse_proxy firefly-ui-frontend:3000 firefly_iii_app:8080 {
+			lb_policy first
+			lb_try_duration 3s
+			fail_duration 10s
+			transport http {
+				dial_timeout 1s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy firefly_iii_app:8080
+	}
+}

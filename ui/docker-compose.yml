@@ -1,0 +1,30 @@
+services:
+  frontend:
+    build: .
+    image: firefly-ui/frontend
+    profiles: [frontend, services]
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    command: [run, serve.ts]
+
+  frontend-dev:
+    image: oven/bun:alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373
+    profiles: [frontend-dev]
+    restart: unless-stopped
+    working_dir: /app
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_PROXY_TARGET: http://api:8080
+    volumes:
+      - .:/app
+      - frontend_node_modules:/app/node_modules
+      - frontend_svelte_kit:/app/.svelte-kit
+    command: [sh, -c, "bun install && bun run dev --host 0.0.0.0 --port 3000"]
+
+volumes:
+  frontend_node_modules:
+  frontend_svelte_kit:
