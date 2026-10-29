@@ -1,0 +1,29 @@
+id = "hello"
+name = "Hello source"
+kind = "source"
+icon = "hand"
+
+[schedule]
+cron = "0 5 * * *"
+
+[budget]
+requests_per_day = 4
+min_interval = "60s"
+
+[match]
+settle_days = 3
+expire_days = 10
+
+[accounts]
+main = { firefly_id = "1", currency = "PLN" }
+
+[[settings]]
+key = "token"
+label = "API token"
+type = "secret"
+required = true
+
+[[settings]]
+key = "greeting"
+label = "Greeting"
+type = "string"
