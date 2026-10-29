@@ -126,7 +126,7 @@ class Hook(Protocol):                       # runs once at the end of a run
 
 Hooks also get `ctx.write`, a narrow writer: `set_rate`, `piggy_add`, `set_budget`. Every other kind gets `ctx.write = None`. `Patch` carries `category`, `tags`, `notes`, `splits`, `description`, `budget` (a budget name) and `booked` (moves the date, for receipts). The core resolves every currency code to a Firefly `currency_id`, so codes longer than three letters (GRAM) work. `ctx.since` is a hint; a source that needs its own window (Erste, 10 days) computes it from `ctx.cursor`.
 
-`Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `Merge` tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
+`Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `Merge` (with optional `booked`, else the earlier date of the two) tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
 
 ## What the core does with a batch
 

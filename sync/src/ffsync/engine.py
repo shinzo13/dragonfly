@@ -398,6 +398,7 @@ class Core:
                     merge.into.tx,
                     self._account(in_m, merge.into.tx.account),
                     description,
+                    merge.booked,
                 )
                 for part in (merge.out, merge.into):
                     self.firefly.delete(part.firefly_id)

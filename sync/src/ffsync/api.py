@@ -94,6 +94,7 @@ class Merge:
     out: Stored
     into: Stored
     description: str | None = None
+    booked: date | None = None
 
 
 @dataclass

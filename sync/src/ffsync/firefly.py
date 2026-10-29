@@ -152,11 +152,11 @@ class Firefly:
         body = {"transactions": [{"transaction_journal_id": j["transaction_journal_id"], **change} for j in journals]}
         self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
 
-    def transfer(self, out_tx: Tx, out_id: str, into_tx: Tx, into_id: str, description: str) -> str:
+    def transfer(self, out_tx: Tx, out_id: str, into_tx: Tx, into_id: str, description: str, booked=None) -> str:
         item: dict[str, Any] = {
             "amount": _money(out_tx.amount),
             "currency_id": self.currency_id(out_tx.currency),
-            "date": out_tx.booked.isoformat(),
+            "date": (booked or min(out_tx.booked, into_tx.booked)).isoformat(),
             "description": description,
             "destination_id": into_id,
             "external_id": f"{out_tx.external_id}+{into_tx.external_id}",
