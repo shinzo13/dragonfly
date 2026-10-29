@@ -49,6 +49,8 @@ Secrets are stored by the core (files, mode 600, outside the plugin folder) and 
 
 ## Python interface
 
+Plugins run in the core's own environment and may import only what `pyproject.toml` of the core lists (today: `httpx`, `pyjwt[crypto]`). A plugin that needs another package asks for it in the room; the core adds it.
+
 ```python
 from dataclasses import dataclass, field
 from datetime import date, datetime
