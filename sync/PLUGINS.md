@@ -30,6 +30,7 @@ min_interval = "60s"
 settle_days = 3                 # a final may arrive up to N days after its provisional
 expire_days = 10                # unsettled provisional becomes a stale_provisional question
 payee_prefix = "first_word"     # first_word | full | none
+gap_tolerance = "0.01"          # balance gaps up to this are ignored; TON wants "0.000001"
 
 [accounts]                      # source only: what this source feeds
 erste = { firefly_id = "1", currency = "PLN" }
@@ -178,7 +179,7 @@ One queue in the core, shown in the UI. Telegram only notifies, with a link into
 
 ## Switching from the old scripts
 
-On the first run of a source the core seeds itself from Firefly: it reads the transactions of every account in `[accounts]` for the last `max(expire_days, 40)` days and remembers their `external_id`s. A source that changed its id format defines `legacy_ids(tx) -> list[str]` returning the old ids of a transaction (Mono: the bare operation id); the core skips a transaction when any of them is already in Firefly. Old pending blocks become open provisionals when their `external_id` starts with `[migrate] provisional_prefix` (`"pdng:"` for Erste), so the first real booking settles them instead of creating a twin.
+On the first run of a source the core seeds itself from Firefly: it reads the transactions of every account in `[accounts]` for the last `max(expire_days, 40)` days and remembers their `external_id`s. A source that changed its id format defines `legacy_ids(tx) -> list[str]` returning the old ids of a transaction (Mono: the bare operation id); the core skips a transaction when any of them is already in Firefly. Old pending blocks become open provisionals when their `external_id` starts with `[migrate] provisional_prefix` (`"pdng:"` for Erste), so the first real booking settles them instead of creating a twin. Transfers the old `transfers.py` merged carry no `external_id`; the core remembers them by account, amount and date, and skips a bank line that matches one within a day.
 
 ## Migration
 

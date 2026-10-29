@@ -41,6 +41,7 @@ class Manifest:
     settle_days: int = 3
     expire_days: int = 10
     payee_prefix: str = "first_word"
+    gap_tolerance: str = "0.01"
     accounts: dict[str, dict[str, str]] = field(default_factory=dict)
     settings: list[Setting] = field(default_factory=list)
     auth: str = "none"
@@ -83,6 +84,7 @@ def load_manifest(folder: Path) -> Manifest:
     manifest.settle_days = int(match.get("settle_days", 3))
     manifest.expire_days = int(match.get("expire_days", 10))
     manifest.payee_prefix = match.get("payee_prefix", "first_word")
+    manifest.gap_tolerance = str(match.get("gap_tolerance", "0.01"))
     if manifest.payee_prefix not in PREFIX_RULES:
         raise ManifestError(f"{manifest.id}: payee_prefix must be one of {', '.join(PREFIX_RULES)}")
     manifest.accounts = {key: {k: str(v) for k, v in value.items()} for key, value in raw.get("accounts", {}).items()}

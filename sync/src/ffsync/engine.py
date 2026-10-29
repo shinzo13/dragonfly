@@ -30,7 +30,6 @@ from .store import Store, now
 
 log = logging.getLogger("ffsync")
 WORD = re.compile(r"[\w']+", re.UNICODE)
-GAP_TOLERANCE = Decimal("0.01")
 LOOKBACK_DAYS = 3
 
 
@@ -211,11 +210,26 @@ class Core:
         for account in manifest.accounts.values():
             for group in self.firefly.all(f"/v1/accounts/{account['firefly_id']}/transactions", start=horizon, end=date.today().isoformat()
             ):
-                split = group["attributes"]["transactions"][0]
+                splits = group["attributes"]["transactions"]
+                split = splits[0]
+                if split["type"] == "transfer":
+                    mine = split["source_id"] == account["firefly_id"]
+                    amount = Decimal(split["amount"]) if mine or not split.get("foreign_amount") else Decimal(split["foreign_amount"])
+                    self.store.run(
+                        "insert or ignore into seen_transfer values (?, ?, ?, ?)",
+                        group["id"],
+                        account["firefly_id"],
+                        str(amount.normalize()),
+                        split["date"][:10],
+                    )
+                for part in splits:
+                    if part.get("external_id"):
+                        self.store.run(
+                            "insert or ignore into seen values (?, ?, ?)", part["external_id"], group["id"], manifest.id
+                        )
                 external = split.get("external_id")
                 if not external:
                     continue
-                self.store.run("insert or ignore into seen values (?, ?, ?)", external, group["id"], manifest.id)
                 prefix = manifest.provisional_prefix
                 if prefix and external.startswith(prefix):
                     side = "debit" if split["source_id"] == account["firefly_id"] else "credit"
@@ -239,7 +253,19 @@ class Core:
             return True
         legacy = getattr(self.modules[manifest.id], "legacy_ids", None)
         ids = [tx.external_id, *(legacy(tx) if legacy else [])]
-        return any(self.store.one("select 1 from seen where external_id = ?", i) for i in ids)
+        if any(self.store.one("select 1 from seen where external_id = ?", i) for i in ids):
+            return True
+        account = self._account(manifest, tx.account)
+        lo, hi = (tx.booked - timedelta(days=1)).isoformat(), (tx.booked + timedelta(days=1)).isoformat()
+        return bool(
+            self.store.one(
+                "select 1 from seen_transfer where account = ? and amount = ? and booked between ? and ?",
+                account,
+                str(tx.amount.normalize()),
+                lo,
+                hi,
+            )
+        )
 
     def _account(self, manifest: Manifest, key: str) -> str:
         account = manifest.accounts.get(key)
@@ -322,15 +348,16 @@ class Core:
 
     def _balance(self, manifest: Manifest, ctx: Ctx, balance: Balance, result: SourceResult, report: RunReport) -> None:
         account_id = self._account(manifest, balance.account)
+        tolerance = Decimal(manifest.gap_tolerance)
         gap = balance.amount - self.firefly.account_balance(account_id)
-        if abs(gap) <= GAP_TOLERANCE:
+        if abs(gap) <= tolerance:
             return
         explainer = getattr(self.modules[manifest.id], "explain_gap", None)
         if explainer:
             for tx in explainer(ctx, balance.account, gap):
                 self._final(manifest, tx, result, report)
             gap = balance.amount - self.firefly.account_balance(account_id)
-        if abs(gap) > GAP_TOLERANCE:
+        if abs(gap) > tolerance:
             self.store.ask(
                 manifest.id,
                 "unexplained_gap",

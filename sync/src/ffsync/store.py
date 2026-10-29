@@ -67,6 +67,13 @@ create table if not exists seen (
   firefly_id text not null,
   source text not null
 );
+create table if not exists seen_transfer (
+  firefly_id text not null,
+  account text not null,
+  amount text not null,
+  booked text not null,
+  primary key (firefly_id, account)
+);
 create table if not exists auth (
   source text primary key,
   expires_at text
