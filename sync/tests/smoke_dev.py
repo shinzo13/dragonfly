@@ -65,6 +65,8 @@ plugins, data = tmp / "plugins", tmp / "data"
                    booked=today - timedelta(days=5), payee="Old shop", description="old, already in Firefly"),
                 Tx(external_id="demo:3", account="main", side="debit", amount=Decimal("7.5"), currency="PLN",
                    booked=today - timedelta(days=3), payee="LIDL 112", description="Lidl"),
+                Tx(external_id="demo:receipt", account="main", side="debit", amount=Decimal("20"), currency="PLN",
+                   booked=today - timedelta(days=3), payee="KAUFLAND 1121", description="receipt, split in Firefly"),
             ]
             if step == 1:
                 return Batch(final=legacy + [
@@ -73,7 +75,7 @@ plugins, data = tmp / "plugins", tmp / "data"
                 Tx(external_id="demo:ton:1", account="ton", side="credit", amount=Decimal("1.5"), currency="GRAM",
                    booked=today - timedelta(days=3), payee="mrkt.ton", description="mrkt"),
                 ], provisional=[pending])
-            return Batch(final=[
+            return Batch(final=legacy[2:] + [
                 Tx(external_id="demo:2", account="main", side="debit", amount=Decimal("12.5"), currency="PLN",
                    booked=today - timedelta(days=1), payee="ZABKA Z0004", description="ZABKA settled"),
                 Tx(external_id="demo:1", account="main", side="debit", amount=Decimal("30"), currency="PLN",
@@ -91,6 +93,11 @@ old_1 = ff.create(_Tx(external_id="legacy-1", account="main", side="debit", amou
                       booked=date.today() - timedelta(days=5), payee="Old shop", description="old"), acc)
 old_pending = ff.create(_Tx(external_id="pdng:9", account="main", side="debit", amount=Decimal("7.50"), currency="PLN",
                       booked=date.today() - timedelta(days=4), payee="LIDL 9", description="old pending"), acc)
+
+# a receipt rewritten into splits without external_id, dated two days before the bank booking
+ff._call("POST", "/v1/transactions", json={"group_title": "receipt", "transactions": [
+    {"type": "withdrawal", "date": (date.today() - timedelta(days=5)).isoformat(), "amount": a, "description": d,
+     "source_id": acc, "destination_name": "Kaufland"} for a, d in (("8", "bread"), ("12", "cheese"))]})
 
 core = Core(plugins, data, ff)
 assert not core.errors, core.errors
@@ -111,11 +118,11 @@ try:
     s1, s2 = r1.sources[0], r2.sources[0]
     checks = {
         "run1 created 3 (incl GRAM)": s1.created == 3,
-        "legacy final skipped": s1.skipped == 1,
+        "legacy final and split receipt skipped": s1.skipped == 2,
         "legacy pending settled by new final": s1.settled == 1,
         "GRAM balance": ff.account_balance(gram) == Decimal("1.5"),
-        "run2 settled 1, skipped 1": s2.settled == 1 and s2.skipped == 1 and s2.created == 0,
-        "5 transactions total incl opening": len(txs) == 5,
+        "run2 settled 1, skipped 2": s2.settled == 1 and s2.skipped == 2 and s2.created == 0,
+        "6 groups total incl opening and receipt": len(txs) == 6,
         "pending got the final id": any(f[2] == "demo:2" for f in flat),
         "balance gap asked": len(core.store.all("select 1 from questions where type='unexplained_gap'")) == 1,
         "budget counted": core.store.used_today("demo") == 2,

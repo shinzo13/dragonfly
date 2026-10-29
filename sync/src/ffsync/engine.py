@@ -212,15 +212,21 @@ class Core:
             ):
                 splits = group["attributes"]["transactions"]
                 split = splits[0]
-                if split["type"] == "transfer":
+                if not any(part.get("external_id") for part in splits):
                     mine = split["source_id"] == account["firefly_id"]
-                    amount = Decimal(split["amount"]) if mine or not split.get("foreign_amount") else Decimal(split["foreign_amount"])
+                    side = "debit" if mine else "credit"
+                    if split["type"] == "transfer" and not mine and split.get("foreign_amount"):
+                        amount = sum(Decimal(part["foreign_amount"]) for part in splits)
+                    else:
+                        amount = sum(Decimal(part["amount"]) for part in splits)
                     self.store.run(
-                        "insert or ignore into seen_transfer values (?, ?, ?, ?)",
+                        "insert or ignore into seen_loose values (?, ?, ?, ?, ?, ?, 0)",
                         group["id"],
                         account["firefly_id"],
+                        side,
                         str(amount.normalize()),
                         split["date"][:10],
+                        int(split["type"] == "transfer"),
                     )
                 for part in splits:
                     if part.get("external_id"):
@@ -256,16 +262,22 @@ class Core:
         if any(self.store.one("select 1 from seen where external_id = ?", i) for i in ids):
             return True
         account = self._account(manifest, tx.account)
-        lo, hi = (tx.booked - timedelta(days=1)).isoformat(), (tx.booked + timedelta(days=1)).isoformat()
-        return bool(
-            self.store.one(
-                "select 1 from seen_transfer where account = ? and amount = ? and booked between ? and ?",
-                account,
-                str(tx.amount.normalize()),
-                lo,
-                hi,
-            )
+        row = self.store.one(
+            """select firefly_id from seen_loose
+               where used = 0 and account = ? and side = ? and amount = ?
+                 and booked between ? and ?
+               order by booked limit 1""",
+            account,
+            tx.side,
+            str(tx.amount.normalize()),
+            (tx.booked - timedelta(days=max(manifest.settle_days, 1))).isoformat(),
+            (tx.booked + timedelta(days=1)).isoformat(),
         )
+        if not row:
+            return False
+        self.store.run("update seen_loose set used = 1 where firefly_id = ? and account = ?", row["firefly_id"], account)
+        self.store.remember(tx.external_id, row["firefly_id"], manifest.id)
+        return True
 
     def _account(self, manifest: Manifest, key: str) -> str:
         account = manifest.accounts.get(key)

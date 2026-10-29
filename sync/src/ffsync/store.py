@@ -67,11 +67,14 @@ create table if not exists seen (
   firefly_id text not null,
   source text not null
 );
-create table if not exists seen_transfer (
+create table if not exists seen_loose (
   firefly_id text not null,
   account text not null,
+  side text not null,
   amount text not null,
   booked text not null,
+  transfer integer not null default 0,
+  used integer not null default 0,
   primary key (firefly_id, account)
 );
 create table if not exists auth (
@@ -98,6 +101,9 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.execute("pragma journal_mode=wal")
         self.db.executescript(SCHEMA)
+        if self.db.execute("select 1 from sqlite_master where name = 'seen_transfer'").fetchone():
+            # seen_transfer only knew transfers; drop it and let every source seed again into seen_loose
+            self.db.executescript("drop table seen_transfer; delete from settings where key = '__seeded';")
         self.lock = threading.RLock()
 
     @contextmanager
