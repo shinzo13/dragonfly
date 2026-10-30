@@ -131,6 +131,13 @@ Hooks also get `ctx.write`, a narrow writer: `set_rate`, `piggy_add`, `set_budge
 
 `Stored` is a transaction as the core knows it after writing: the `Tx` fields plus `firefly_id` and `source`. `fresh` is what this run created; `recent` is what the core wrote in the last `lookback_days` (0 = none), not yet merged, read back from Firefly so manual edits show. Both halves of a transfer rarely land in one run (Erste books PayPal and Paysend 1-4 days late), so a matcher pairs `fresh` against `fresh + recent`. Groups older than the switch to the core are not in `recent`. A transaction used by two merges is merged once. `Merge` (with optional `booked`, else the earlier date of the two) tells the core to turn two stored withdrawals or deposits into one transfer (the `transfers.py` case: Erste to Paysend to Mono, two currencies). `Patch` changes fields of one stored transaction: category, splits, tags, notes. Exact field lists for `Stored`, `Merge`, `Patch`, `RunReport` and `Question` come with draft 2, after the core skeleton exists.
 
+
+### Receipts
+
+A provisional that is the same purchase as something already stored on that account is not created again; it is laid over the stored one. Two cases, checked in order: an open provisional of another source (same side and amount, payee by this source's `payee_prefix`, dates at most `settle_days` apart either way, the larger of the two sources), or a stored single-split booking dated `[booked, booked + settle_days of its source]` that carries nothing from this source yet. Its `splits`, `notes` and `attachments` go onto the stored transaction; payee and `external_id` stay; on a booking the date becomes the receipt date. Its `external_id` is remembered for that `firefly_id`, the report counts it as `settled`. When a booking settles a provisional, the earlier of the two dates wins.
+
+`Tx.attachments: list[Attachment(filename, content: bytes)]` are uploaded to the first journal on create and on lay-over. `ctx.data` is the plugin's own writable folder (`data/plugins/<id>`). `ctx.resolve(key)` closes the plugin's own open question with that key, for questions the plugin answers itself (`receipts` once the receipt arrives). Question types: `category`, `receipts`, `receipt_items`, `stale_provisional`, `unexplained_gap`; the UI shows unknown ones with a Done button.
+
 ## What the core does with a batch
 
 1. **Final**: skip if `external_id` was already written. Otherwise try to settle an open provisional, see below. Otherwise create a Firefly transaction with `external_id` set.

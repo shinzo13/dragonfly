@@ -100,29 +100,59 @@ class Firefly:
         }
         return self._call("POST", "/v1/transactions", json={k: v for k, v in body.items() if v is not None})["data"]["id"]
 
+    def attach(self, firefly_id: str, tx: Tx, account_id: str, move_date: bool) -> None:
+        """Lay a receipt over a stored transaction: its splits and notes, the stored payee and external_id stay."""
+        journals = self.journals(firefly_id)
+        first = journals[0]
+        if not tx.splits:
+            if tx.notes:
+                self._call("PUT", f"/v1/transactions/{firefly_id}", json={"transactions": [
+                    {"transaction_journal_id": first["transaction_journal_id"], "notes": tx.notes}]})
+            return
+        parts = self._splits(tx, account_id)
+        for i, part in enumerate(parts):
+            part["external_id"] = first.get("external_id")
+            part["date"] = tx.booked.isoformat() if move_date else first["date"]
+            if tx.side == "debit":
+                part["destination_name"] = first["destination_name"]
+            else:
+                part["source_name"] = first["source_name"]
+            if i < len(journals):
+                part["transaction_journal_id"] = journals[i]["transaction_journal_id"]
+            part = {k: v for k, v in part.items() if v is not None}
+            parts[i] = part
+        body: dict[str, Any] = {"transactions": parts}
+        if len(parts) > 1:
+            body["group_title"] = tx.description
+        self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
+
+    def upload(self, firefly_id: str, attachments) -> None:
+        """Attachments go on the first journal of the group."""
+        if not attachments:
+            return
+        journal = self.journals(firefly_id)[0]["transaction_journal_id"]
+        for item in attachments:
+            meta = {"filename": item.filename, "attachable_type": "TransactionJournal", "attachable_id": str(journal)}
+            attachment = self._call("POST", "/v1/attachments", json=meta)["data"]["id"]
+            self._call(
+                "POST",
+                f"/v1/attachments/{attachment}/upload",
+                content=item.content,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+
     def journals(self, firefly_id: str) -> list[dict[str, Any]]:
         return self.get(f"/v1/transactions/{firefly_id}")["data"]["attributes"]["transactions"]
 
     def settle(self, firefly_id: str, final: Tx) -> None:
-        journals = self.journals(firefly_id)
-        single = len(journals) == 1
-        body = {
-            "transactions": [
-                {
-                    "transaction_journal_id": j["transaction_journal_id"],
-                    "date": final.booked.isoformat(),
-                    "external_id": final.external_id,
-                    **({"amount": _money(final.amount)} if single else {}),
-                    **(
-                        {"foreign_amount": _money(final.foreign_amount), "foreign_currency_id": self.currency_id(final.foreign_currency)}
-                        if single and final.foreign_amount is not None and final.foreign_currency
-                        else {}
-                    ),
-                }
-                for j in journals
-            ]
-        }
-        self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
+        single = len(self.journals(firefly_id)) == 1
+        # the earlier date wins: a receipt or a block carries the purchase date, Erste books 1-4 days late
+        fields: dict[str, Any] = {"external_id": final.external_id}
+        if single:
+            fields["amount"] = _money(final.amount)
+            if final.foreign_amount is not None and final.foreign_currency:
+                fields |= {"foreign_amount": _money(final.foreign_amount), "foreign_currency_id": self.currency_id(final.foreign_currency)}
+        self._update_splits(firefly_id, lambda j: fields | {"date": min(j["date"][:10], final.booked.isoformat())})
 
     def patch(self, firefly_id: str, tx: Tx, account_id: str, patch: Patch) -> None:
         journals = self.journals(firefly_id)

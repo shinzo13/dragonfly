@@ -55,6 +55,8 @@ class Ctx:
         self.since = start - timedelta(days=LOOKBACK_DAYS)
         self.firefly = core.firefly
         self.write = core.firefly if manifest.kind == "hook" else None
+        self.data = core.data / "plugins" / manifest.id
+        self.data.mkdir(parents=True, exist_ok=True)
         self.asked = 0
 
     def secret(self, key: str) -> str:
@@ -82,6 +84,15 @@ class Ctx:
     def ask(self, question: Question) -> None:
         if self.core.store.ask(self.plugin, question.type, question.text, question.payload, question.key):
             self.asked += 1
+
+    def resolve(self, key: str) -> None:
+        self.core.store.run(
+            "update questions set answered = ?, answer = ? where source = ? and key = ? and answered is null",
+            now(),
+            json.dumps({"resolved_by": self.plugin}),
+            self.plugin,
+            key,
+        )
 
 
 class Core:
@@ -309,9 +320,57 @@ class Core:
             result.settled += 1
             return
         firefly_id = self.firefly.create(self._with_rules(tx), self._account(manifest, tx.account))
+        self.firefly.upload(firefly_id, tx.attachments)
         self.store.remember(tx.external_id, firefly_id, manifest.id)
         report.created.append(Stored(tx=tx, source=manifest.id, firefly_id=firefly_id, provisional=False))
         result.created += 1
+
+    def _attach_target(self, manifest: Manifest, tx: Tx, account_id: str) -> tuple[str | None, bool]:
+        """An open provisional of another source within settle_days either way, else a stored single-split
+        booking dated [tx.booked, tx.booked + settle_days of its source] that carries nothing from this source yet."""
+        key = payee_key(tx.payee, manifest.payee_prefix)
+
+        def payee_ok(payee: str) -> bool:
+            return manifest.payee_prefix == "none" or payee_key(payee, manifest.payee_prefix) == key
+
+        for row in self.store.all(
+            """select * from provisional where open = 1 and source != ? and account = ? and side = ? and amount = ?
+               order by booked, rowid""",
+            manifest.id,
+            account_id,
+            tx.side,
+            str(tx.amount.normalize()),
+        ):
+            other = self.manifest(row["source"])
+            days = max(manifest.settle_days, other.settle_days if other else 0)
+            if abs((date.fromisoformat(row["booked"]) - tx.booked).days) <= days and payee_ok(row["payee"]):
+                return row["firefly_id"], False
+        sharing = [m for m in self.of_kind("source") if any(a["firefly_id"] == account_id for a in m.accounts.values())]
+        widest = max([m.settle_days for m in sharing] + [manifest.settle_days])
+        groups = self.firefly.all(
+            f"/v1/accounts/{account_id}/transactions",
+            start=tx.booked.isoformat(),
+            end=(tx.booked + timedelta(days=widest)).isoformat(),
+            type="withdrawal" if tx.side == "debit" else "deposit",
+        )
+        for group in sorted(groups, key=lambda g: g["attributes"]["transactions"][0]["date"]):
+            splits = group["attributes"]["transactions"]
+            split = splits[0]
+            if len(splits) > 1 or Decimal(split["amount"]) != tx.amount:
+                continue
+            if self.store.one("select 1 from provisional where firefly_id = ? and open = 1", group["id"]):
+                continue
+            if self.store.one("select 1 from written where firefly_id = ? and source = ?", group["id"], manifest.id):
+                continue
+            payee = split["destination_name"] if tx.side == "debit" else split["source_name"]
+            if not payee_ok(payee or ""):
+                continue
+            owner = self.store.one("select source from written where firefly_id = ?", group["id"])
+            owner_m = self.manifest(owner["source"]) if owner else None
+            days = owner_m.settle_days if owner_m else widest
+            if date.fromisoformat(split["date"][:10]) <= tx.booked + timedelta(days=days):
+                return group["id"], True
+        return None, False
 
     def _find_provisional(self, manifest: Manifest, tx: Tx):
         candidates = self.store.all(
@@ -337,7 +396,16 @@ class Core:
             result.skipped += 1
             return
         account_id = self._account(manifest, tx.account)
+        target, is_final = self._attach_target(manifest, tx, account_id)
+        if target:
+            # the same purchase is already stored (a block of another source, or the booking): lay this one over it
+            self.firefly.attach(target, tx, account_id, move_date=is_final)
+            self.firefly.upload(target, tx.attachments)
+            self.store.remember(tx.external_id, target, manifest.id)
+            result.settled += 1
+            return
         firefly_id = self.firefly.create(self._with_rules(tx), account_id)
+        self.firefly.upload(firefly_id, tx.attachments)
         with self.store.tx() as db:
             db.execute(
                 "insert or replace into written values (?, ?, ?, ?)", (tx.external_id, firefly_id, manifest.id, now())

@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal, Protocol
 
 VERSION = 1
 
 Side = Literal["debit", "credit"]
-QuestionType = Literal["category", "receipts", "stale_provisional", "unexplained_gap"]
+QuestionType = Literal["category", "receipts", "receipt_items", "stale_provisional", "unexplained_gap"]
 
 
 class BudgetExhausted(Exception):
@@ -46,6 +47,13 @@ class Tx:
     splits: list[Split] = field(default_factory=list)
     notes: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    attachments: list[Attachment] = field(default_factory=list)
+
+
+@dataclass
+class Attachment:
+    filename: str
+    content: bytes
 
 
 @dataclass
@@ -143,6 +151,7 @@ class Context(Protocol):
     since: date
     firefly: FireflyReader
     write: FireflyWriter | None
+    data: Path  # the plugin's own writable folder
 
     def secret(self, key: str) -> str: ...
     def setting(self, key: str, default: Any = None) -> Any: ...
@@ -150,6 +159,7 @@ class Context(Protocol):
     def spend(self, n: int = 1) -> None: ...
     def log(self, message: str, **fields: Any) -> None: ...
     def ask(self, question: Question) -> None: ...
+    def resolve(self, key: str) -> None: ...  # closes the plugin's own open question with this key
 
 
 class Source(Protocol):
