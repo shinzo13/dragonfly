@@ -29,6 +29,7 @@ min_interval = "60s"
 [match]                         # source only, see "Provisional transactions"
 settle_days = 3                 # a final may arrive up to N days after its provisional
 expire_days = 10                # unsettled provisional becomes a stale_provisional question
+replace_provisional = false     # the provisional batch is the whole current set, see "Provisional transactions"
 payee_prefix = "first_word"     # first_word | full | none
 gap_tolerance = "0.01"          # balance gaps up to this are ignored; TON wants "0.000001"
 lookback_days = 14              # matcher only: how far back `recent` reaches
@@ -155,6 +156,8 @@ A final settles the oldest open provisional of the same source and account when:
 - the final is booked from 0 to `settle_days` days after the provisional.
 
 Settling updates the existing Firefly transaction (date, `external_id`, amount in the account currency) instead of creating a new one. A receipt that came before the bank is a provisional of the receipt source with the receipt's payee ("KAUFLAND 1029"). It is settled by the bank's final the same way, and its splits survive the update. A provisional still open after `expire_days` becomes a `stale_provisional` question.
+
+With `replace_provisional = true` the source's provisional batch is its whole current set (Erste PSD2 gives no PDNG lines, only the hold total from `ITBD - ITAV`, sent as one provisional with a fixed `external_id`). An open provisional with the same `external_id` gets the new amount, date and description when they changed (counted as `settled`); an open provisional missing from the batch is deleted from Firefly, and its `external_id` may come back later as a new one. Such provisionals never settle against a final, nothing is laid over them, and they never go stale.
 
 ## Questions
 

@@ -43,6 +43,7 @@ class Manifest:
     payee_prefix: str = "first_word"
     lookback_days: int = 0
     gap_tolerance: str = "0.01"
+    replace_provisional: bool = False
     accounts: dict[str, dict[str, str]] = field(default_factory=dict)
     settings: list[Setting] = field(default_factory=list)
     auth: str = "none"
@@ -87,6 +88,7 @@ def load_manifest(folder: Path) -> Manifest:
     manifest.payee_prefix = match.get("payee_prefix", "first_word")
     manifest.lookback_days = int(match.get("lookback_days", 0))
     manifest.gap_tolerance = str(match.get("gap_tolerance", "0.01"))
+    manifest.replace_provisional = bool(match.get("replace_provisional", False))
     if manifest.payee_prefix not in PREFIX_RULES:
         raise ManifestError(f"{manifest.id}: payee_prefix must be one of {', '.join(PREFIX_RULES)}")
     manifest.accounts = {key: {k: str(v) for k, v in value.items()} for key, value in raw.get("accounts", {}).items()}

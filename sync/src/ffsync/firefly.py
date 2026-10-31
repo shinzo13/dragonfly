@@ -229,5 +229,11 @@ class Firefly:
     def set_category(self, firefly_id: str, category: str) -> None:
         self._update_splits(firefly_id, lambda j: {"category_name": category})
 
+    def reprice(self, firefly_id: str, tx) -> None:
+        self._update_splits(
+            firefly_id,
+            lambda j: {"amount": _money(tx.amount), "date": tx.booked.isoformat(), "description": tx.description or tx.payee},
+        )
+
     def delete(self, firefly_id: str) -> None:
         self._call("DELETE", f"/v1/transactions/{firefly_id}")

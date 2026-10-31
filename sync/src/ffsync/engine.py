@@ -201,8 +201,11 @@ class Core:
             batch: Batch = self.modules[manifest.id].fetch(ctx)
             for tx in batch.final:
                 self._final(manifest, tx, result, report)
-            for tx in batch.provisional:
-                self._provisional(manifest, tx, result, report)
+            if manifest.replace_provisional:
+                self._replace(manifest, batch.provisional, result, report)
+            else:
+                for tx in batch.provisional:
+                    self._provisional(manifest, tx, result, report)
             for balance in batch.balances:
                 self._balance(manifest, ctx, balance, result, report)
             self.store.mark_run(manifest.id, True, batch.cursor)
@@ -342,6 +345,8 @@ class Core:
             str(tx.amount.normalize()),
         ):
             other = self.manifest(row["source"])
+            if self._replaced(row):
+                continue
             days = max(manifest.settle_days, other.settle_days if other else 0)
             if abs((date.fromisoformat(row["booked"]) - tx.booked).days) <= days and payee_ok(row["payee"]):
                 return row["firefly_id"], False
@@ -383,6 +388,8 @@ class Core:
         )
         key = payee_key(tx.payee, manifest.payee_prefix)
         for row in candidates:
+            if self._replaced(row):
+                continue
             booked = date.fromisoformat(row["booked"])
             if not (booked <= tx.booked <= booked + timedelta(days=manifest.settle_days)):
                 continue
@@ -404,6 +411,10 @@ class Core:
             self.store.remember(tx.external_id, target, manifest.id)
             result.settled += 1
             return
+        self._create_provisional(manifest, tx, result, report)
+
+    def _create_provisional(self, manifest: Manifest, tx: Tx, result: SourceResult, report: RunReport) -> None:
+        account_id = self._account(manifest, tx.account)
         firefly_id = self.firefly.create(self._with_rules(tx), account_id)
         self.firefly.upload(firefly_id, tx.attachments)
         with self.store.tx() as db:
@@ -425,6 +436,34 @@ class Core:
             )
         report.created.append(Stored(tx=tx, source=manifest.id, firefly_id=firefly_id, provisional=True))
         result.created += 1
+
+    def _replace(self, manifest: Manifest, txs: list[Tx], result: SourceResult, report: RunReport) -> None:
+        """The batch is the whole current set of this source's provisionals: changed ones are repriced,
+        missing ones deleted from Firefly, new ones created. They never settle against finals."""
+        current = {row["external_id"]: row for row in self.store.all("select * from provisional where open = 1 and source = ?", manifest.id)}
+        for tx in txs:
+            row = current.pop(tx.external_id, None)
+            if not row:
+                self.store.run("delete from written where external_id = ?", tx.external_id)
+                self._create_provisional(manifest, tx, result, report)
+                continue
+            if Decimal(row["amount"]) == tx.amount and row["booked"] == tx.booked.isoformat():
+                result.skipped += 1
+                continue
+            self.firefly.reprice(row["firefly_id"], tx)
+            self.store.run(
+                "update provisional set amount = ?, booked = ?, payee = ? where firefly_id = ?",
+                str(tx.amount.normalize()),
+                tx.booked.isoformat(),
+                tx.payee,
+                row["firefly_id"],
+            )
+            result.settled += 1
+        for row in current.values():
+            self.firefly.delete(row["firefly_id"])
+            with self.store.tx() as db:
+                db.execute("delete from provisional where firefly_id = ?", (row["firefly_id"],))
+                db.execute("delete from written where firefly_id = ?", (row["firefly_id"],))
 
     def _balance(self, manifest: Manifest, ctx: Ctx, balance: Balance, result: SourceResult, report: RunReport) -> None:
         account_id = self._account(manifest, balance.account)
@@ -532,8 +571,14 @@ class Core:
             out.append(Stored(tx=tx, source=source.id, firefly_id=row["firefly_id"], provisional=provisional))
         return out
 
+    def _replaced(self, row) -> bool:
+        owner = self.manifest(row["source"])
+        return bool(owner and owner.replace_provisional)
+
     def _expire(self) -> None:
         for manifest in self.of_kind("source"):
+            if manifest.replace_provisional:
+                continue
             limit = (date.today() - timedelta(days=manifest.expire_days)).isoformat()
             for row in self.store.all(
                 "select * from provisional where open = 1 and source = ? and booked < ?", manifest.id, limit
