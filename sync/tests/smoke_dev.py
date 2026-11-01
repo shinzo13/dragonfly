@@ -1,4 +1,4 @@
-"""End-to-end check against dev Firefly. Creates a throwaway account, deletes it at the end."""
+# End-to-end check against dev Firefly. Creates a throwaway account, deletes it at the end.
 
 import json
 import sys

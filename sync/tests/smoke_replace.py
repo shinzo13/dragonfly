@@ -1,4 +1,4 @@
-"""replace_provisional against dev Firefly: create, reprice, a final of the same amount does not settle it, delete. Throwaway account."""
+# replace_provisional against dev Firefly: create, reprice, a final of the same amount does not settle it, delete. Throwaway account.
 
 import os
 import sys

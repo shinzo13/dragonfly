@@ -39,7 +39,6 @@ def matches(expr: str, at: datetime) -> bool:
 
 
 def next_after(expr: str, after: datetime) -> datetime | None:
-    """The first minute after `after` that the cron expression fires, within a year."""
     at = after.replace(second=0, microsecond=0)
     for _ in range(HORIZON_MINUTES):
         at += timedelta(minutes=1)

@@ -1,4 +1,4 @@
-"""A bank's 429 ends the source's run without retries; the scheduler waits, the button does not. No Firefly needed: uv run --with pytest pytest tests/test_rejected.py"""
+# A bank's 429 ends the source's run without retries; the scheduler waits, the button does not. No Firefly needed: uv run --with pytest pytest tests/test_rejected.py
 
 import textwrap
 from datetime import UTC, datetime, timedelta

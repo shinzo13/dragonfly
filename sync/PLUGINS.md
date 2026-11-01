@@ -1,6 +1,6 @@
 # Firefly sync: plugin interface
 
-Version 1, 2026-10-29. The code is the source of truth: `src/ffsync/api.py`. Nothing here is built yet.
+Version 1, 2026-10-29. The code is the source of truth: `src/ffsync/api.py`.
 
 ## Pieces
 
@@ -196,11 +196,3 @@ One queue in the core, shown in the UI. Telegram only notifies, with a link into
 ## Switching from the old scripts
 
 On the first run of a source the core seeds itself from Firefly: it reads the transactions of every account in `[accounts]` for the last `max(expire_days, 40)` days and remembers their `external_id`s. A source that changed its id format defines `legacy_ids(tx) -> list[str]` returning the old ids of a transaction (Mono: the bare operation id); the core skips a transaction when any of them is already in Firefly. Old pending blocks become open provisionals when their `external_id` starts with `[migrate] provisional_prefix` (`"pdng:"` for Erste), so the first real booking settles them instead of creating a twin. Groups without any `external_id` (transfers the old `transfers.py` merged, receipts `receipt.py` rewrote into splits) are remembered by account, side, group amount (sum of splits) and date. A bank line is skipped and linked to such a group when the group date lies in `[booked - settle_days, booked + 1 day]`; each group is used once. The cost: a genuinely new line with the same amount in that window is skipped too, so check the migration window by eye.
-
-## Migration
-
-Nothing on prod changes until approved. Order once approved:
-
-1. The core skeleton runs against dev Firefly with plugins ported one by one, the cron sync on prod keeps running untouched.
-2. Each ported plugin is checked against prod data read-only: same transactions as the old script would write, or the difference explained.
-3. Switch over source by source; the old script for that source is disabled in the same step.

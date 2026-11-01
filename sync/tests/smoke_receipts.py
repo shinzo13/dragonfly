@@ -1,4 +1,4 @@
-"""Receipts against dev Firefly: a receipt laid over a booking, over a block, a block over a receipt. Throwaway account."""
+# Receipts against dev Firefly: a receipt laid over a booking, over a block, a block over a receipt. Throwaway account.
 
 import os
 import sys

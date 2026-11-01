@@ -101,7 +101,6 @@ class Firefly:
         return self._call("POST", "/v1/transactions", json={k: v for k, v in body.items() if v is not None})["data"]["id"]
 
     def attach(self, firefly_id: str, tx: Tx, account_id: str, move_date: bool) -> None:
-        """Lay a receipt over a stored transaction: its splits and notes, the stored payee and external_id stay."""
         journals = self.journals(firefly_id)
         first = journals[0]
         if not tx.splits:
@@ -127,7 +126,6 @@ class Firefly:
         self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
 
     def upload(self, firefly_id: str, attachments) -> None:
-        """Attachments go on the first journal of the group."""
         if not attachments:
             return
         journal = self.journals(firefly_id)[0]["transaction_journal_id"]
@@ -210,7 +208,6 @@ class Firefly:
         self._call("PUT", f"/v1/piggy-banks/{piggy_id}", json=body)
 
     def _update_splits(self, firefly_id: str, fields) -> None:
-        """PUT the group with fields(journal) merged into each split; split groups need their title back."""
         group = self.get(f"/v1/transactions/{firefly_id}")["data"]["attributes"]
         parts = [{"transaction_journal_id": j["transaction_journal_id"]} | fields(j) for j in group["transactions"]]
         body: dict[str, Any] = {"transactions": parts}
@@ -219,7 +216,6 @@ class Firefly:
         self._call("PUT", f"/v1/transactions/{firefly_id}", json=body)
 
     def set_budget(self, firefly_id: str, budget: str, journals: list[str] | None = None) -> None:
-        """Budget on every split of the group, or only on the given transaction_journal_ids."""
         wanted = None if journals is None else {str(j) for j in journals}
         self._update_splits(
             firefly_id,

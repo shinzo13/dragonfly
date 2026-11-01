@@ -49,7 +49,6 @@ def payee_key(payee: str, rule: str) -> str:
 
 
 def retry_until(header: str | None, at: datetime) -> datetime | None:
-    """Retry-After as a moment in the future: seconds or an HTTP date, anything else counts as no header."""
     if not header:
         return None
     text = header.strip()
@@ -146,7 +145,6 @@ class Core:
         os.chmod(path, 0o600)
 
     def run_ready(self, manifest: Manifest) -> str | None:
-        """Why a source cannot run right now, or None."""
         row = self.store.cursor(manifest.id)
         if manifest.min_interval and row and row["last_run"]:
             wait = datetime.fromisoformat(row["last_run"]) + timedelta(seconds=manifest.min_interval) - datetime.now(UTC)
@@ -155,7 +153,6 @@ class Core:
         return None
 
     def waiting(self, source: str, at: datetime) -> bool:
-        """The bank's Retry-After has not passed yet: the scheduler leaves this source alone, the button does not."""
         raw = self.store.setting(source, RETRY_UNTIL)
         return raw is not None and at < datetime.fromisoformat(json.loads(raw))
 
@@ -241,7 +238,6 @@ class Core:
         return result
 
     def _rejected(self, manifest: Manifest, response: httpx.Response, result: SourceResult) -> None:
-        """The bank said 429: no retries in this run, the cursor stays, the next try is the schedule's."""
         at = datetime.now(UTC)
         until = retry_until(response.headers.get("retry-after"), at)
         if until:
@@ -254,7 +250,6 @@ class Core:
         self.store.mark_run(manifest.id, False)
 
     def _seed(self, manifest: Manifest) -> None:
-        """First run of a source: learn what is already in Firefly, so nothing is written twice."""
         horizon = (date.today() - timedelta(days=max(manifest.expire_days, 40))).isoformat()
         for account in manifest.accounts.values():
             for group in self.firefly.all(f"/v1/accounts/{account['firefly_id']}/transactions", start=horizon, end=date.today().isoformat()
@@ -364,8 +359,6 @@ class Core:
         result.created += 1
 
     def _attach_target(self, manifest: Manifest, tx: Tx, account_id: str) -> tuple[str | None, bool]:
-        """An open provisional of another source within settle_days either way, else a stored single-split
-        booking dated [tx.booked, tx.booked + settle_days of its source] that carries nothing from this source yet."""
         key = payee_key(tx.payee, manifest.payee_prefix)
 
         def payee_ok(payee: str) -> bool:
@@ -473,8 +466,6 @@ class Core:
         result.created += 1
 
     def _replace(self, manifest: Manifest, txs: list[Tx], result: SourceResult, report: RunReport) -> None:
-        """The batch is the whole current set of this source's provisionals: changed ones are repriced,
-        missing ones deleted from Firefly, new ones created. They never settle against finals."""
         current = {row["external_id"]: row for row in self.store.all("select * from provisional where open = 1 and source = ?", manifest.id)}
         for tx in txs:
             row = current.pop(tx.external_id, None)
@@ -561,7 +552,6 @@ class Core:
                     self.store.remember(part.tx.external_id, new_id, part.source)
 
     def _recent(self, matcher: Manifest, created: list[Stored]) -> list[Stored]:
-        """Unmerged single-split withdrawals and deposits the core wrote in the last lookback_days, read back from Firefly."""
         if not matcher.lookback_days:
             return []
         fresh = {s.firefly_id for s in created}
