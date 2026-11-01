@@ -17,7 +17,7 @@
 	@ffui_on query ffui=on
 	header @ffui_on Set-Cookie "ffui=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
 
-	@ffui_assets path /_app/* /favicon.svg /manifest.webmanifest /icon-192.png /icon-512.png
+	@ffui_assets path /_app/* /favicon.svg /manifest.webmanifest /icon.svg /icon-maskable.svg /icon-192.png /icon-512.png /apple-touch-icon.png /logo.svg
 	handle @ffui_assets {
 		reverse_proxy firefly-ui-frontend:3000
 	}

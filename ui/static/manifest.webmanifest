@@ -1,28 +1,21 @@
 {
-  "name": "Firefly III",
-  "short_name": "Firefly",
+  "name": "Dragonfly",
+  "short_name": "Dragonfly",
   "start_url": "/",
   "scope": "/",
+  "id": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#3c8dbc",
+  "orientation": "portrait",
+  "background_color": "#0d0e11",
+  "theme_color": "#0d0e11",
   "icons": [
-    {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Quick entry", "url": "/?quick" },
-    { "name": "New expense", "url": "/transactions/create/withdrawal" },
-    { "name": "Transactions", "url": "/transactions/all" }
+    { "name": "Transactions", "url": "/tx" },
+    { "name": "Stats", "url": "/stats" }
   ]
 }
