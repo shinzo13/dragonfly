@@ -1,11 +1,10 @@
 <script lang="ts">
+  import Logo from "#lib/v2/components/Logo.svelte";
   import "./layout.css";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import { ModeWatcher } from "mode-watcher";
   import { onMount, untrack } from "svelte";
   import { queryClient } from "#lib/api/lists.js";
-  import QuickEntry from "#lib/components/QuickEntry.svelte";
-  import Shell from "#lib/components/shell/Shell.svelte";
   import { keys } from "#lib/keys.svelte.js";
   import { period, rangeFromUrl } from "#lib/period.svelte.js";
   import { session } from "#lib/session.svelte.js";
@@ -67,12 +66,7 @@
 
 <QueryClientProvider client={queryClient}>
   {#if session.ready && period.ready}
-    <Shell>
-      {@render children()}
-      {#snippet quick()}
-        <QuickEntry />
-      {/snippet}
-    </Shell>
+    {@render children()}
   {:else if session.failed}
     <main class="grid min-h-dvh place-items-center p-6 text-center">
       <div class="flex max-w-md flex-col gap-3">
@@ -94,7 +88,20 @@
     </main>
   {:else}
     <main class="grid min-h-dvh place-items-center text-cladd-fg-soft">
-      <span>Connecting to Firefly III</span>
+      <span class="boot"><Logo size={56} /></span>
     </main>
   {/if}
 </QueryClientProvider>
+
+<style>
+  .boot {
+    color: #5b74ff;
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.35;
+      transform: translateY(-3px);
+    }
+  }
+</style>

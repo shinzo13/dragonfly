@@ -33,11 +33,11 @@ export const NAV: NavSection[] = [
   {
     items: [
       {
-        href: "/",
+        href: "/dashboard",
         icon: LayoutDashboard,
         keys: "g d",
         label: "Dashboard",
-        match: ["/", "/home"],
+        match: ["/dashboard"],
       },
     ],
   },

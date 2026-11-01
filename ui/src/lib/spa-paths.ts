@@ -1,6 +1,13 @@
 export const SPA_EXACT = [
   "/",
   "/home",
+  "/dashboard",
+  "/tx",
+  "/acc",
+  "/debts",
+  "/control",
+  "/stats",
+  "/sync",
   "/accounts",
   "/budgets",
   "/categories",
@@ -24,6 +31,8 @@ export const SPA_EXACT = [
 ];
 
 export const SPA_PREFIXES = [
+  "/tx/",
+  "/acc/",
   "/accounts/",
   "/inactive-accounts/",
   "/transactions/",

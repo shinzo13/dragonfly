@@ -252,7 +252,7 @@
       class="flex h-full shrink-0 items-center gap-2 px-4 text-[17px] tracking-[-0.01em] {ui.collapsed
         ? "lg:w-14 lg:justify-center lg:px-0"
         : "lg:w-60"}"
-      href="/"
+      href="/dashboard"
     >
       {#if ui.collapsed}
         <strong class="hidden lg:inline">FF</strong>

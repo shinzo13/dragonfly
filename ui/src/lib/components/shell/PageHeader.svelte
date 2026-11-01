@@ -40,7 +40,7 @@
       aria-label="Breadcrumbs"
       class="flex items-center gap-1.5 text-[12px] text-cladd-fg-soft"
     >
-      <li><a class="hover:text-cladd-fg hover:underline" href="/">Home</a></li>
+      <li><a class="hover:text-cladd-fg hover:underline" href="/dashboard">Home</a></li>
       {#each crumbs as crumb (crumb.label)}
         <li aria-hidden="true" class="text-cladd-fg-softest">/</li>
         <li>
