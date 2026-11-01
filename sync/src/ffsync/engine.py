@@ -94,9 +94,6 @@ class Ctx:
         raw = self.core.store.setting(self.plugin, key)
         return json.loads(raw) if raw is not None else default
 
-    def spend(self, n: int = 1) -> None:
-        pass
-
     def log(self, message: str, **fields: Any) -> None:
         log.info("[%s] %s %s", self.plugin, message, fields or "")
 

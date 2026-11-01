@@ -53,7 +53,6 @@ plugins, data = tmp / "plugins", tmp / "data"
             return [tx.external_id.removeprefix("demo:")]
 
         def fetch(self, ctx):
-            ctx.spend()
             step = int(open(STEP).read())
             today = date.today()
             pending = Tx(external_id="demo:pending:1", account="main", side="debit", amount=Decimal("12.50"),
