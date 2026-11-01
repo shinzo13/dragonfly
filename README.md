@@ -18,36 +18,13 @@ make env
 make rebuild
 ```
 
-The UI has no domain of its own, it has to live on Firefly's. [`ui/caddy/fireflyiii.site.caddy`](ui/caddy/fireflyiii.site.caddy) is the Caddy config I run, adapt it to your setup: UI pages and assets go to the UI, the rest goes to Firefly.
-
 ```sh
 cd sync
 FIREFLY_URL=http://firefly:8080 FIREFLY_TOKEN_FILE=token FFSYNC_PLUGINS=plugins uv run ffsync
 ```
 
-`token` is a file with a Firefly personal access token. The core listens on `127.0.0.1:38091`; add a proxy route for `/sync/*` to it. The core has no auth of its own, so put that route behind one: it holds your bank credentials.
+`token` is a file with a Firefly access token. On your proxy, put the UI on Firefly's domain and route `/sync/*` to the core (`127.0.0.1:38091`) behind auth, since it has none of its own. [Caddy example](ui/caddy/fireflyiii.site.caddy).
 
 ## Plugins
 
-A plugin is a folder with `manifest.toml` and `plugin.py`. There are four kinds:
-
-- `source` fetches transactions from a bank
-- `matcher` links stored transactions, such as two sides of a transfer
-- `enricher` changes one stored transaction, such as its category
-- `hook` runs before or after the sources, such as for exchange rates
-
-Plugins never write to Firefly. They return data, and the core handles scheduling, deduplication and writing.
-
-```python
-from ffsync.api import Batch, Context
-
-
-class Hello:
-    def fetch(self, ctx: Context) -> Batch:
-        return Batch()
-
-
-plugin = Hello()
-```
-
-To connect one, put its folder into `FFSYNC_PLUGINS` and restart the core or call `POST /sync/reload`. It then shows up in the Sync tab, with its settings as a form. Start from [`sync/examples/hello`](sync/examples/hello); the full interface is in [`sync/PLUGINS.md`](sync/PLUGINS.md).
+A plugin is a folder with `manifest.toml` and `plugin.py` that fetches transactions from a bank or processes them. Drop it into `FFSYNC_PLUGINS` and it shows up in the Sync tab. See [docs/plugins.md](docs/plugins.md).
