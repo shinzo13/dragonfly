@@ -16,3 +16,7 @@ node_modules/
 
 # Local playground
 /t/
+
+# Local design notes
+.impeccable/
+PRODUCT.md
