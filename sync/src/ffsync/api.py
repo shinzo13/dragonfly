@@ -14,10 +14,6 @@ Side = Literal["debit", "credit"]
 QuestionType = Literal["category", "receipts", "receipt_items", "stale_provisional", "unexplained_gap"]
 
 
-class BudgetExhausted(Exception):
-    """Raised by ctx.spend() when the source has no requests left today."""
-
-
 class AuthExpired(Exception):
     """Raise from fetch() when the bank wants the user to log in again."""
 
@@ -121,6 +117,8 @@ class SourceResult:
     settled: int = 0
     skipped: int = 0
     error: str | None = None
+    rejected: bool = False
+    retry_at: str | None = None
 
 
 @dataclass

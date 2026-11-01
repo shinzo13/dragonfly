@@ -31,8 +31,6 @@ plugins, data = tmp / "plugins", tmp / "data"
     id = "demo"
     name = "Demo bank"
     kind = "source"
-    [budget]
-    requests_per_day = 5
     [match]
     settle_days = 3
     expire_days = 10
@@ -144,7 +142,6 @@ try:
         "7 groups total incl opening, receipt, transfer": len(txs) == 7,
         "pending got the final id": any(f[2] == "demo:2" for f in flat),
         "balance gap asked": len(core.store.all("select 1 from questions where type='unexplained_gap'")) == 1,
-        "budget counted": core.store.used_today("demo") == 2,
     }
     for name, passed in checks.items():
         print("PASS" if passed else "FAIL", name)

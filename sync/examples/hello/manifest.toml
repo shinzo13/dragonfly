@@ -7,7 +7,6 @@ icon = "hand"
 cron = "0 5 * * *"
 
 [budget]
-requests_per_day = 4
 min_interval = "60s"
 
 [match]

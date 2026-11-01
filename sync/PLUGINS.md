@@ -4,7 +4,7 @@ Version 1, 2026-10-29. The code is the source of truth: `src/ffsync/api.py`. Not
 
 ## Pieces
 
-- **core**: one Python service in its own container, in the same compose as Firefly. Owns the scheduler, the request budget, deduplication, matching of provisional transactions, the question queue, the state database (`sqlite`) and the HTTP API the UI talks to. The only thing that writes to Firefly.
+- **core**: one Python service in its own container, in the same compose as Firefly. Owns the scheduler, deduplication, matching of provisional transactions, the question queue, the state database (`sqlite`) and the HTTP API the UI talks to. The only thing that writes to Firefly.
 - **plugins**: folders with `manifest.toml` and `plugin.py`, in any directory the core is pointed at (`FFSYNC_PLUGINS`). Bank plugins live in a private repo, the core repo ships only `examples/`. `plugin.py` defines `plugin`, an instance with the methods of its kind. Four kinds: `source`, `matcher`, `enricher`, `hook`. Plugins never call the Firefly API to write; they return data and the core applies it.
 - **UI**: the Sync tab. Talks to the core through `/sync/*`, proxied by the UI server.
 
@@ -23,7 +23,6 @@ after = []                      # ids that must finish first in the same run (ma
 phase = "after"                 # hooks only: "before" runs ahead of the sources (exchange rates)
 
 [budget]                        # source only
-requests_per_day = 4
 min_interval = "60s"
 
 [match]                         # source only, see "Provisional transactions"
@@ -48,6 +47,11 @@ type = "oauth_redirect"         # oauth_redirect | none
 ```
 
 Secrets are stored by the core (files, mode 600, outside the plugin folder) and handed to the plugin through `ctx.secret(key)`. A plugin never reads its own files outside its folder.
+
+
+## When the bank says 429
+
+A source lets `httpx.HTTPStatusError` with status 429 reach the core (`raise_for_status()` does that) and does not retry on its own. The core ends this source's run at once, keeps its cursor and `last_ok`, so the next run reads the same window, and reports `rejected: true` with `retry_at`, the next try. With a `Retry-After` (seconds or a date) the scheduler leaves the source alone until it passes; without one the next scheduled run tries. `POST /sync/plugins/{id}/run` and `POST /sync/run` try once regardless of `Retry-After`; `min_interval` still applies to them. There is no daily request counter.
 
 ## Python interface
 
@@ -105,7 +109,7 @@ class Context(Protocol):
     since: date                             # core's suggestion: last successful run minus 3 days
     def secret(self, key: str) -> str: ...
     def setting(self, key: str): ...
-    def spend(self, n: int = 1) -> None: ...  # count a request against [budget]; raises BudgetExhausted
+    def spend(self, n: int = 1) -> None: ...  # does nothing, kept until the plugins stop calling it
     def log(self, message: str, **fields) -> None: ...
     def ask(self, question: "Question") -> None: ...
     firefly: "FireflyReader"                # read-only Firefly client
@@ -176,8 +180,8 @@ One queue in the core, shown in the UI. Telegram only notifies, with a link into
 
 | Method | Path | Does |
 |---|---|---|
-| GET | `/sync/plugins` | manifests, status, last run, next run, budget left, auth expiry |
-| POST | `/sync/plugins/{id}/run` | run one source now, refused with 429 when the budget is spent |
+| GET | `/sync/plugins` | manifests, status, last run, next run, auth expiry |
+| POST | `/sync/plugins/{id}/run` | run one source now, refused with 429 inside `min_interval`, tried once even while the bank's `Retry-After` runs |
 | POST | `/sync/run` | full run, like the scheduler |
 | GET/PUT | `/sync/plugins/{id}/settings` | settings; secrets are write-only |
 | POST | `/sync/plugins/{id}/auth/start` | returns the bank url; the UI sends the browser there |
@@ -188,7 +192,7 @@ One queue in the core, shown in the UI. Telegram only notifies, with a link into
 
 ## Core state (sqlite)
 
-`written(external_id, firefly_id, source, at)`, `provisional(firefly_id, source, account, side, amount, payee, booked, open)`, `budget(source, day, used)`, `runs(id, started, finished, ok, report_json)`, `rules(payee, category)`, `questions(id, type, payload_json, created, answered, answer_json)`, `cursors(source, cursor)`, `auth(source, expires_at)`.
+`written(external_id, firefly_id, source, at)`, `provisional(firefly_id, source, account, side, amount, payee, booked, open)`, `runs(id, started, finished, ok, report_json)`, `rules(payee, category)`, `questions(id, type, payload_json, created, answered, answer_json)`, `cursors(source, cursor)`, `auth(source, expires_at)`.
 
 ## Switching from the old scripts
 

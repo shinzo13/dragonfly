@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 RANGES = ((0, 59), (0, 23), (1, 31), (1, 12), (0, 6))
+HORIZON_MINUTES = 366 * 24 * 60
 
 
 def _field(text: str, low: int, high: int) -> set[int]:
@@ -35,3 +36,13 @@ def matches(expr: str, at: datetime) -> bool:
         and at.month in month
         and (at.isoweekday() % 7) in weekday
     )
+
+
+def next_after(expr: str, after: datetime) -> datetime | None:
+    """The first minute after `after` that the cron expression fires, within a year."""
+    at = after.replace(second=0, microsecond=0)
+    for _ in range(HORIZON_MINUTES):
+        at += timedelta(minutes=1)
+        if matches(expr, at):
+            return at
+    return None

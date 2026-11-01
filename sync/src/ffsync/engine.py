@@ -9,14 +9,16 @@ import traceback
 from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from .api import (
     AuthExpired,
     Balance,
     Batch,
-    BudgetExhausted,
     Patch,
     Question,
     RunReport,
@@ -24,6 +26,7 @@ from .api import (
     Stored,
     Tx,
 )
+from .cron import next_after
 from .firefly import Firefly, FireflyError
 from .manifest import Manifest, discover, load_module
 from .store import Store, now
@@ -31,6 +34,8 @@ from .store import Store, now
 log = logging.getLogger("ffsync")
 WORD = re.compile(r"[\w']+", re.UNICODE)
 LOOKBACK_DAYS = 3
+RATE_LIMITED = 429
+RETRY_UNTIL = "__retry_until"
 
 
 def payee_key(payee: str, rule: str) -> str:
@@ -41,6 +46,23 @@ def payee_key(payee: str, rule: str) -> str:
         words = WORD.findall(text)
         return words[0] if words else ""
     return text
+
+
+def retry_until(header: str | None, at: datetime) -> datetime | None:
+    """Retry-After as a moment in the future: seconds or an HTTP date, anything else counts as no header."""
+    if not header:
+        return None
+    text = header.strip()
+    if text.isdigit():
+        until = at + timedelta(seconds=int(text))
+    else:
+        try:
+            until = parsedate_to_datetime(text)
+        except ValueError:
+            return None
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=UTC)
+    return until if until > at else None
 
 
 class Ctx:
@@ -73,10 +95,7 @@ class Ctx:
         return json.loads(raw) if raw is not None else default
 
     def spend(self, n: int = 1) -> None:
-        limit = self.manifest.requests_per_day
-        if limit is not None and self.core.store.used_today(self.plugin) + n > limit:
-            raise BudgetExhausted(f"{self.plugin}: {limit} requests a day are spent")
-        self.core.store.spend(self.plugin, n)
+        pass
 
     def log(self, message: str, **fields: Any) -> None:
         log.info("[%s] %s %s", self.plugin, message, fields or "")
@@ -131,15 +150,17 @@ class Core:
 
     def run_ready(self, manifest: Manifest) -> str | None:
         """Why a source cannot run right now, or None."""
-        limit = manifest.requests_per_day
-        if limit is not None and self.store.used_today(manifest.id) >= limit:
-            return f"{limit} requests a day are spent"
         row = self.store.cursor(manifest.id)
         if manifest.min_interval and row and row["last_run"]:
             wait = datetime.fromisoformat(row["last_run"]) + timedelta(seconds=manifest.min_interval) - datetime.now(UTC)
             if wait.total_seconds() > 0:
                 return f"wait {int(wait.total_seconds())} s more"
         return None
+
+    def waiting(self, source: str, at: datetime) -> bool:
+        """The bank's Retry-After has not passed yet: the scheduler leaves this source alone, the button does not."""
+        raw = self.store.setting(source, RETRY_UNTIL)
+        return raw is not None and at < datetime.fromisoformat(json.loads(raw))
 
     def run(self, only: list[str] | None = None) -> RunReport:
         if not self.run_lock.acquire(blocking=False):
@@ -195,6 +216,7 @@ class Core:
         if blocked:
             return SourceResult(source=manifest.id, ok=False, error=blocked)
         ctx = Ctx(self, manifest)
+        self.store.run("delete from settings where source = ? and key = ?", manifest.id, RETRY_UNTIL)
         try:
             if self.store.setting(manifest.id, "__seeded") is None:
                 self._seed(manifest)
@@ -209,14 +231,30 @@ class Core:
             for balance in batch.balances:
                 self._balance(manifest, ctx, balance, result, report)
             self.store.mark_run(manifest.id, True, batch.cursor)
-        except (BudgetExhausted, AuthExpired, FireflyError, Exception) as error:
+        except Exception as error:
             result.ok = False
+            if isinstance(error, httpx.HTTPStatusError) and error.response.status_code == RATE_LIMITED:
+                self._rejected(manifest, error.response, result)
+                return result
             result.error = f"{type(error).__name__}: {error}"
             log.warning("[%s] %s", manifest.id, traceback.format_exc())
             self.store.mark_run(manifest.id, False)
             if isinstance(error, AuthExpired):
                 self.store.run("insert or replace into auth values (?, ?)", manifest.id, now())
         return result
+
+    def _rejected(self, manifest: Manifest, response: httpx.Response, result: SourceResult) -> None:
+        """The bank said 429: no retries in this run, the cursor stays, the next try is the schedule's."""
+        at = datetime.now(UTC)
+        until = retry_until(response.headers.get("retry-after"), at)
+        if until:
+            self.store.set_setting(manifest.id, RETRY_UNTIL, until.isoformat())
+        retry = next_after(manifest.cron, max(at, until or at)) if manifest.cron else until
+        result.rejected = True
+        result.retry_at = retry.isoformat() if retry else None
+        result.error = f"Refused by the bank, next try {retry:%Y-%m-%d %H:%M} UTC" if retry else "Refused by the bank, try again by hand"
+        log.info("[%s] %s", manifest.id, result.error)
+        self.store.mark_run(manifest.id, False)
 
     def _seed(self, manifest: Manifest) -> None:
         """First run of a source: learn what is already in Firefly, so nothing is written twice."""

@@ -40,7 +40,7 @@ def describe(core: Core, m: Manifest) -> dict[str, Any]:
         "kind": m.kind,
         "icon": m.icon,
         "cron": m.cron,
-        "budget": {"per_day": m.requests_per_day, "used": core.store.used_today(m.id), "min_interval": m.min_interval},
+        "min_interval": m.min_interval,
         "blocked": core.run_ready(m) if m.kind == "source" else None,
         "last_run": row["last_run"] if row else None,
         "last_ok": row["last_ok"] if row else None,
@@ -159,6 +159,10 @@ def build(core: Core) -> Starlette:
     )
 
 
+def due_sources(core: Core, at: datetime) -> list[str]:
+    return [m.id for m in core.of_kind("source") if m.cron and matches(m.cron, at) and not core.waiting(m.id, at)]
+
+
 def scheduler(core: Core) -> None:
     last = ""
     while True:
@@ -166,7 +170,7 @@ def scheduler(core: Core) -> None:
         stamp = at.isoformat()
         if stamp != last:
             last = stamp
-            due = [m.id for m in core.of_kind("source") if m.cron and matches(m.cron, at)]
+            due = due_sources(core, at)
             if due:
                 try:
                     core.run(due)

@@ -36,7 +36,6 @@ class Manifest:
     cron: str | None = None
     after: list[str] = field(default_factory=list)
     phase: str = "after"
-    requests_per_day: int | None = None
     min_interval: int = 0
     settle_days: int = 3
     expire_days: int = 10
@@ -80,7 +79,6 @@ def load_manifest(folder: Path) -> Manifest:
     if manifest.phase not in ("before", "after"):
         raise ManifestError(f"{manifest.id}: phase must be before or after")
     budget = raw.get("budget", {})
-    manifest.requests_per_day = budget.get("requests_per_day")
     manifest.min_interval = _seconds(budget.get("min_interval", 0))
     match = raw.get("match", {})
     manifest.settle_days = int(match.get("settle_days", 3))

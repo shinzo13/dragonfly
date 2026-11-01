@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -27,12 +27,6 @@ create table if not exists provisional (
   open integer not null default 1
 );
 create index if not exists provisional_open on provisional(source, account, open);
-create table if not exists budget (
-  source text not null,
-  day text not null,
-  used integer not null default 0,
-  primary key (source, day)
-);
 create table if not exists runs (
   id integer primary key autoincrement,
   started text not null,
@@ -135,18 +129,6 @@ class Store:
 
     def remember(self, external_id: str, firefly_id: str, source: str) -> None:
         self.run("insert or replace into written values (?, ?, ?, ?)", external_id, firefly_id, source, now())
-
-    def used_today(self, source: str) -> int:
-        row = self.one("select used from budget where source = ? and day = ?", source, date.today().isoformat())
-        return row["used"] if row else 0
-
-    def spend(self, source: str, n: int) -> None:
-        self.run(
-            "insert into budget values (?, ?, ?) on conflict(source, day) do update set used = used + excluded.used",
-            source,
-            date.today().isoformat(),
-            n,
-        )
 
     def cursor(self, source: str) -> sqlite3.Row | None:
         return self.one("select * from cursors where source = ?", source)
