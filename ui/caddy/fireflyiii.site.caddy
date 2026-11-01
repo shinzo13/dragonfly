@@ -8,6 +8,7 @@
 #   ?ffui=old  this request only, old UI, no cookie
 #   ?ffui=off  old UI until the browser session ends (cookie ffui=off)
 #   ?ffui=on   clear the cookie, new UI again
+
 {$FIREFLY_DOMAIN} {
 	import cf_tls
 	import compress

@@ -55,7 +55,7 @@ A source lets `httpx.HTTPStatusError` with status 429 reach the core (`raise_for
 
 ## Python interface
 
-Plugins run in the core's own environment and may import only what `pyproject.toml` of the core lists (today: `httpx`, `pyjwt[crypto]`). A plugin that needs another package asks for it in the room; the core adds it.
+Plugins run in the core's own environment and may import only what `pyproject.toml` of the core lists (today: `httpx`, `pyjwt[crypto]`). A plugin that needs another package adds it there.
 
 ```python
 from dataclasses import dataclass, field

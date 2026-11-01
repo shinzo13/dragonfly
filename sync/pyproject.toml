@@ -1,8 +1,7 @@
 [project]
 name = "ffsync"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Bank sync core for Firefly III"
 authors = [
     { name = "shinzo13", email = "verysafeaccount@proton.me" }
 ]
