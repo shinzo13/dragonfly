@@ -27,6 +27,14 @@ create table if not exists provisional (
   open integer not null default 1
 );
 create index if not exists provisional_open on provisional(source, account, open);
+create table if not exists blockades (
+  source text not null,
+  account text not null,
+  firefly_id text not null,
+  amount text not null,
+  booked text not null,
+  primary key (source, account)
+);
 create table if not exists runs (
   id integer primary key autoincrement,
   started text not null,

@@ -61,10 +61,20 @@ class Balance:
 
 
 @dataclass
+class Blockade:
+    """Money the bank holds on an account without saying what for, as one total per account."""
+
+    account: str
+    amount: Decimal
+    currency: str
+
+
+@dataclass
 class Batch:
     final: list[Tx] = field(default_factory=list)
     provisional: list[Tx] = field(default_factory=list)
     balances: list[Balance] = field(default_factory=list)
+    blockades: list[Blockade] = field(default_factory=list)
     cursor: str | None = None
 
 

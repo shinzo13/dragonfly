@@ -262,7 +262,8 @@ Currency codes longer than three letters work: the core resolves each one to a F
 
 - `Split`: `amount`, `description`, `category`, `tags`, `notes`.
 - `Balance`: `account`, `amount`, `currency`, `at`.
-- `Batch`: `final`, `provisional`, `balances`, `cursor`.
+- `Blockade`: `account`, `amount`, `currency`.
+- `Batch`: `final`, `provisional`, `balances`, `blockades`, `cursor`.
 - `Stored`: `tx`, `source`, `firefly_id`, `provisional`. A transaction as the core wrote it.
 - `Patch`: `category`, `tags`, `notes`, `splits`, `description`, `budget`, `booked`. `None` leaves a field as it is.
 - `Merge`: `out`, `into`, `description`, `booked`.
@@ -297,6 +298,16 @@ A final settles the oldest open provisional of the same source and account when:
 Settling updates the existing Firefly transaction with the date, `external_id` and amount instead of creating a new one, and its splits survive. When a booking settles a provisional, the earlier date wins. A provisional still open after `expire_days` becomes a `stale_provisional` question.
 
 With `replace_provisional = true`, the batch is the source's whole current set. Use this when a bank gives only a total of its holds, sent as one provisional with a fixed `external_id`. An open provisional with the same id is updated when it changed, and one missing from the batch is deleted from Firefly. These provisionals never settle against a final, nothing is laid over them, and they never go stale.
+
+## Blockades
+
+Some banks report how much money is held on an account but not what it was spent on. Return that as one total per account:
+
+```python
+Batch(final=final, blockades=[Blockade(account="main", amount=held, currency="PLN")])
+```
+
+The core keeps one Firefly withdrawal per account, dated today and tagged `blockade`, so balances and spending stay right. `blockades` is the source's whole current set: a changed amount updates the transaction, and an account missing from the batch has its transaction deleted. The UI leaves these transactions out of lists and category breakdowns and shows their sum separately. With no blockades, nothing is shown.
 
 ## Receipts
 

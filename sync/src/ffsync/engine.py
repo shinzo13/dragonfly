@@ -19,10 +19,12 @@ from .api import (
     AuthExpired,
     Balance,
     Batch,
+    Blockade,
     Patch,
     Question,
     RunReport,
     SourceResult,
+    Split,
     Stored,
     Tx,
 )
@@ -36,6 +38,9 @@ WORD = re.compile(r"[\w']+", re.UNICODE)
 LOOKBACK_DAYS = 3
 RATE_LIMITED = 429
 RETRY_UNTIL = "__retry_until"
+NOT_FOUND = 404
+BLOCKADE_TAG = "blockade"
+BLOCKADE_TITLE = "Blockades"
 
 
 def payee_key(payee: str, rule: str) -> str:
@@ -222,6 +227,7 @@ class Core:
             else:
                 for tx in batch.provisional:
                     self._provisional(manifest, tx, result, report)
+            self._blockades(manifest, batch.blockades, result)
             for balance in batch.balances:
                 self._balance(manifest, ctx, balance, result, report)
             self.store.mark_run(manifest.id, True, batch.cursor)
@@ -393,6 +399,8 @@ class Core:
                 continue
             if self.store.one("select 1 from provisional where firefly_id = ? and open = 1", group["id"]):
                 continue
+            if self.store.one("select 1 from blockades where firefly_id = ?", group["id"]):
+                continue
             if self.store.one("select 1 from written where firefly_id = ? and source = ?", group["id"], manifest.id):
                 continue
             payee = split["destination_name"] if tx.side == "debit" else split["source_name"]
@@ -490,6 +498,55 @@ class Core:
             with self.store.tx() as db:
                 db.execute("delete from provisional where firefly_id = ?", (row["firefly_id"],))
                 db.execute("delete from written where firefly_id = ?", (row["firefly_id"],))
+
+    def _blockades(self, manifest: Manifest, blockades: list[Blockade], result: SourceResult) -> None:
+        current = {row["account"]: row for row in self.store.all("select * from blockades where source = ?", manifest.id)}
+        booked = date.today()
+        for blockade in blockades:
+            if blockade.amount <= 0:
+                continue
+            row = current.pop(blockade.account, None)
+            tx = Tx(
+                external_id=f"{manifest.id}:blockade:{blockade.account}",
+                account=blockade.account,
+                side="debit",
+                amount=blockade.amount,
+                currency=blockade.currency,
+                booked=booked,
+                payee=BLOCKADE_TITLE,
+                description=BLOCKADE_TITLE,
+                splits=[Split(amount=blockade.amount, description=BLOCKADE_TITLE, tags=[BLOCKADE_TAG])],
+            )
+            if row and Decimal(row["amount"]) == tx.amount and row["booked"] == booked.isoformat():
+                result.skipped += 1
+                continue
+            firefly_id = row["firefly_id"] if row else None
+            if firefly_id:
+                try:
+                    self.firefly.reprice(firefly_id, tx)
+                    result.settled += 1
+                except FireflyError as error:
+                    if error.status != NOT_FOUND:
+                        raise
+                    firefly_id = None
+            if not firefly_id:
+                firefly_id = self.firefly.create(tx, self._account(manifest, tx.account))
+                result.created += 1
+            self.store.run(
+                "insert or replace into blockades values (?, ?, ?, ?, ?)",
+                manifest.id,
+                blockade.account,
+                firefly_id,
+                str(tx.amount.normalize()),
+                booked.isoformat(),
+            )
+        for row in current.values():
+            try:
+                self.firefly.delete(row["firefly_id"])
+            except FireflyError as error:
+                if error.status != NOT_FOUND:
+                    raise
+            self.store.run("delete from blockades where source = ? and account = ?", manifest.id, row["account"])
 
     def _balance(self, manifest: Manifest, ctx: Ctx, balance: Balance, result: SourceResult, report: RunReport) -> None:
         account_id = self._account(manifest, balance.account)
