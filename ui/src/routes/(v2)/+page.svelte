@@ -11,7 +11,7 @@
   import { mobile } from "#lib/v2/mobile.svelte.js";
   import { money, view } from "#lib/v2/money.svelte.js";
   import { balanceOf, spendByCategory, totals, worth } from "#lib/v2/stats.js";
-  import { toRow } from "#lib/v2/tx.js";
+  import { isBlockade, toRow } from "#lib/v2/tx.js";
   import { hidden } from "#lib/v2/hidden.svelte.js";
   import { periodName } from "#lib/v2/when.js";
 
@@ -22,7 +22,8 @@
   const prevTxs = createQuery(() => q.transactions(prev.start, prev.end));
 
   const rows = $derived((txs.data ?? []).map(toRow));
-  const slices = $derived(view.ready ? spendByCategory(rows) : []);
+  const held = $derived(view.ready ? totals(rows.filter(isBlockade)).spent : 0);
+  const slices = $derived(view.ready ? spendByCategory(rows.filter((row) => !isBlockade(row))) : []);
   const sum = $derived(view.ready ? totals(rows) : { earned: 0, spent: 0 });
   const prevSum = $derived(view.ready ? totals((prevTxs.data ?? []).map(toRow)) : null);
   const total = $derived(view.ready ? worth(accounts.data) : 0);
@@ -49,6 +50,7 @@
         {money(Math.abs(diff), view.code, { decimals: 0 })} {diff <= 0 ? "less" : "more"} than {prevName} ·
       {/if}
       earned <a class="pos link" href="/tx?type=deposit">{show(sum.earned, 0)}</a>
+      {#if held}· <a class="link" href="/tx">{show(held, 0)} in blockades</a>{/if}
     </div>
     {#if slices.length}
       <div class="stack">

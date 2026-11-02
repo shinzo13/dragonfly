@@ -9,7 +9,7 @@
   import { byTag, days, flow, lastDay, monthsUpTo, places } from "#lib/v2/stats/model.js";
   import Places from "#lib/v2/stats/Places.svelte";
   import TagMap from "#lib/v2/stats/TagMap.svelte";
-  import { toRow } from "#lib/v2/tx.js";
+  import { isBlockade, toRow } from "#lib/v2/tx.js";
   import { periodName } from "#lib/v2/when.js";
 
   const allMonths = $derived(monthsUpTo(period.end, 12));
@@ -29,7 +29,7 @@
     const at = all.findIndex((d) => d.earned + d.spent > peak * 0.05);
     return allMonths.slice(Math.min(at < 0 ? 0 : at, allMonths.length - 3));
   });
-  const rows = $derived((current.data ?? []).map(toRow));
+  const rows = $derived((current.data ?? []).map(toRow).filter((row) => !isBlockade(row)));
 
   const flowData = $derived(view.ready ? flow(yearRows, months) : []);
   const tagData = $derived(view.ready ? byTag(rows) : []);

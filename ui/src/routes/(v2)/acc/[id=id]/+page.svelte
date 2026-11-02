@@ -16,7 +16,7 @@
   import { mobile } from "#lib/v2/mobile.svelte.js";
   import { view } from "#lib/v2/money.svelte.js";
   import { rowValue } from "#lib/v2/stats.js";
-  import { byDay, type Row, toRow } from "#lib/v2/tx.js";
+  import { byDay, isBlockade, type Row, toRow } from "#lib/v2/tx.js";
   import { dayLabel, periodName } from "#lib/v2/when.js";
 
   const id = $derived(page.params.id ?? "");
@@ -27,7 +27,9 @@
   const a = $derived(account.data?.attributes);
   let editing = $state(false);
   const isDebt = $derived(Boolean(a && a.type !== "asset"));
-  const rows = $derived((txs.data ?? []).map(toRow));
+  const loaded = $derived((txs.data ?? []).map(toRow));
+  const rows = $derived(loaded.filter((row) => !isBlockade(row)));
+  const held = $derived(view.ready ? loaded.filter(isBlockade).reduce((s, row) => s + rowValue(row), 0) : 0);
   const dir = (row: Row) => (row.splits[0].source_id === id ? -1 : 1);
   const days = $derived(byDay(rows));
   const flat = $derived(days.flatMap(([, list]) => list));
@@ -37,7 +39,7 @@
     if (!view.ready) {
       return { inn, out };
     }
-    for (const row of rows) {
+    for (const row of loaded) {
       const v = dir(row) * rowValue(row);
       if (v < 0) {
         out -= v;
@@ -81,6 +83,7 @@
             <div><div class="small">In</div><div class="flow-sum pos">{view.show(flow.inn, { decimals: 0 })}</div></div>
           </div>
           <div class="kv">
+            {#if held}<span>Blockades</span><span data-copy>{view.show(held)}</span>{/if}
             {#if a.iban}<span>IBAN</span><span>{a.iban}</span>{/if}
             {#if a.account_number}<span>Number</span><span>{a.account_number}</span>{/if}
             {#if a.notes}<span>Notes</span><span>{a.notes}</span>{/if}

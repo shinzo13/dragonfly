@@ -3,6 +3,8 @@ import { toNumber } from "#lib/format.js";
 
 export type Kind = "out" | "in" | "move";
 
+export const BLOCKADE_TAG = "blockade";
+
 export interface Row {
   id: string;
   date: string;
@@ -83,6 +85,8 @@ export function toRow({ id, attributes }: Item<TransactionGroup>): Row {
     type: first.type,
   };
 }
+
+export const isBlockade = (row: Row) => row.tags.includes(BLOCKADE_TAG);
 
 export function byDay(rows: Row[]): [string, Row[]][] {
   const days = new Map<string, Row[]>();

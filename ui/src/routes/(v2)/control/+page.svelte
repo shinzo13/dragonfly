@@ -19,7 +19,7 @@
   import { q } from "#lib/v2/data.js";
   import { look } from "#lib/v2/look.svelte.js";
   import { money, primaryCode, view } from "#lib/v2/money.svelte.js";
-  import { toRow } from "#lib/v2/tx.js";
+  import { isBlockade, toRow } from "#lib/v2/tx.js";
   import { daysBetween, daysIn, periodName, shortDate } from "#lib/v2/when.js";
 
   const TABS = [
@@ -56,7 +56,7 @@
     if (!view.ready) {
       return [];
     }
-    const outs = (txs.data ?? []).map(toRow).filter((r) => r.kind === "out");
+    const outs = (txs.data ?? []).map(toRow).filter((r) => r.kind === "out" && !isBlockade(r));
     const ids = new Set((budgets.data ?? []).map((b) => b.id));
     const groups = new Map<string, Map<string, { id: string | null; name: string; value: number }>>();
     let outside = 0;
