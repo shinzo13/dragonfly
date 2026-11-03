@@ -11,7 +11,8 @@
   import { mobile } from "#lib/v2/mobile.svelte.js";
   import { money, view } from "#lib/v2/money.svelte.js";
   import { balanceOf, spendByCategory, totals, worth } from "#lib/v2/stats.js";
-  import { isBlockade, toRow } from "#lib/v2/tx.js";
+  import { currentBlockades, isBlockade, toRow } from "#lib/v2/tx.js";
+  import { today } from "#lib/dates.js";
   import { hidden } from "#lib/v2/hidden.svelte.js";
   import { periodName } from "#lib/v2/when.js";
 
@@ -19,10 +20,11 @@
 
   const accounts = createQuery(() => q.accounts("asset", period.end));
   const txs = createQuery(() => q.transactions(period.start, period.end));
+  const blocked = createQuery(() => q.blocked());
   const prevTxs = createQuery(() => q.transactions(prev.start, prev.end));
 
   const rows = $derived((txs.data ?? []).map(toRow));
-  const held = $derived(view.ready ? totals(rows.filter(isBlockade)).spent : 0);
+  const held = $derived(view.ready ? totals(currentBlockades(rows, (blocked.data ?? []).map(toRow), period.start, period.end, today())).spent : 0);
   const slices = $derived(view.ready ? spendByCategory(rows.filter((row) => !isBlockade(row))) : []);
   const sum = $derived(view.ready ? totals(rows) : { earned: 0, spent: 0 });
   const prevSum = $derived(view.ready ? totals((prevTxs.data ?? []).map(toRow)) : null);

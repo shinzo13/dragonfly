@@ -16,7 +16,8 @@
   import { mobile } from "#lib/v2/mobile.svelte.js";
   import { view } from "#lib/v2/money.svelte.js";
   import { rowValue } from "#lib/v2/stats.js";
-  import { byDay, isBlockade, type Row, toRow } from "#lib/v2/tx.js";
+  import { byDay, currentBlockades, isBlockade, type Row, toRow } from "#lib/v2/tx.js";
+  import { today } from "#lib/dates.js";
   import { dayLabel, periodName } from "#lib/v2/when.js";
 
   const id = $derived(page.params.id ?? "");
@@ -24,12 +25,14 @@
   const account = createQuery(() => q.account(id, period.end));
   const txs = createQuery(() => q.accountTransactions(id, period.start, period.end));
 
+  const blocked = createQuery(() => q.blocked());
+
   const a = $derived(account.data?.attributes);
   let editing = $state(false);
   const isDebt = $derived(Boolean(a && a.type !== "asset"));
   const loaded = $derived((txs.data ?? []).map(toRow));
   const rows = $derived(loaded.filter((row) => !isBlockade(row)));
-  const held = $derived(view.ready ? loaded.filter(isBlockade).reduce((s, row) => s + rowValue(row), 0) : 0);
+  const held = $derived(view.ready ? currentBlockades(loaded, (blocked.data ?? []).map(toRow).filter((row) => row.accountId === id), period.start, period.end, today()).reduce((s, row) => s + rowValue(row), 0) : 0);
   const dir = (row: Row) => (row.splits[0].source_id === id ? -1 : 1);
   const days = $derived(byDay(rows));
   const flat = $derived(days.flatMap(([, list]) => list));

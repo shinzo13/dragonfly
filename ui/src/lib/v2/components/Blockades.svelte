@@ -8,6 +8,15 @@
   let { rows }: { rows: Row[] } = $props();
 
   const total = $derived(rows.reduce((s, row) => s + rowValue(row), 0));
+  const accounts = $derived.by(() => {
+    const map = new Map<string, { id: string; name: string; value: number }>();
+    for (const row of rows) {
+      const entry = map.get(row.accountId) ?? { id: row.accountId, name: row.account, value: 0 };
+      entry.value += rowValue(row);
+      map.set(row.accountId, entry);
+    }
+    return [...map.values()];
+  });
 </script>
 
 {#if rows.length}
@@ -16,14 +25,14 @@
       <span class="small">Blockades</span>
       <span class="sum" data-copy>{view.show(total)}</span>
     </div>
-    {#if rows.length > 1}
+    {#if accounts.length > 1}
       <div class="accounts">
-        {#each rows as row (row.id)}
-          {@const l = look.of("account", row.accountId, row.account)}
+        {#each accounts as account (account.id)}
+          {@const l = look.of("account", account.id, account.name)}
           <div class="account">
             <Chip color={l.color} icon={l.icon} radius={7} size={24} />
-            <span class="name">{row.account}</span>
-            <span class="muted" data-copy>{view.show(rowValue(row))}</span>
+            <span class="name">{account.name}</span>
+            <span class="muted" data-copy>{view.show(account.value)}</span>
           </div>
         {/each}
       </div>

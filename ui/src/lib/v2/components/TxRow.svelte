@@ -38,6 +38,7 @@
     {#if row.splits.length > 1}
       <span class="small splits"><Split size={13} />{row.splits.length}</span>
     {/if}
+    {#if row.blocked}<span class="blockade">blockade</span>{/if}
     {#if !compact}
       {#each row.tags.slice(0, 2) as tag (tag)}<Tag {tag} />{/each}
       {#if row.tags.length > 2}<span class="small">+{row.tags.length - 2}</span>{/if}
@@ -105,6 +106,15 @@
     align-items: center;
     gap: 3px;
     flex: none;
+  }
+  .blockade {
+    flex: none;
+    padding: 2px 7px;
+    border-radius: 6px;
+    background: var(--sunk);
+    color: var(--warn);
+    font-size: 11.5px;
+    font-weight: 700;
   }
   .cat,
   .acc {

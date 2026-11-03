@@ -4,6 +4,7 @@ import { toNumber } from "#lib/format.js";
 export type Kind = "out" | "in" | "move";
 
 export const BLOCKADE_TAG = "blockade";
+export const BLOCKED_TAG = "blockade-item";
 
 export interface Row {
   id: string;
@@ -19,6 +20,7 @@ export interface Row {
   category: string | null;
   budgetId: string | null;
   tags: string[];
+  blocked: boolean;
   account: string;
   accountId: string;
   other: string;
@@ -57,7 +59,8 @@ export function toRow({ id, attributes }: Item<TransactionGroup>): Row {
   const kind = kindOf(first.type);
   const amount = splits.reduce((s, x) => s + toNumber(x.amount), 0);
   const pc = splits.reduce((s, x) => s + toNumber(x.pc_amount ?? x.amount), 0);
-  const tags = [...new Set(splits.flatMap((x) => x.tags ?? []))];
+  const allTags = [...new Set(splits.flatMap((x) => x.tags ?? []))];
+  const tags = allTags.filter((tag) => tag !== BLOCKED_TAG);
   const mine = kind === "in";
   const sharedPrefix = first.description.match(SPLIT_PREFIX)?.[1];
   const base =
@@ -67,6 +70,7 @@ export function toRow({ id, attributes }: Item<TransactionGroup>): Row {
     account: (mine ? first.destination_name : first.source_name) ?? "",
     accountId: (mine ? first.destination_id : first.source_id) ?? "",
     amount,
+    blocked: allTags.includes(BLOCKED_TAG),
     budgetId: first.budget_id ?? null,
     category: first.category_name ?? null,
     categoryId: first.category_id ?? null,
@@ -87,6 +91,10 @@ export function toRow({ id, attributes }: Item<TransactionGroup>): Row {
 }
 
 export const isBlockade = (row: Row) => row.tags.includes(BLOCKADE_TAG);
+
+export function currentBlockades(loaded: Row[], blocked: Row[], start: string, end: string, day: string): Row[] {
+  return [...loaded.filter(isBlockade), ...(start <= day && day <= end ? blocked : [])];
+}
 
 export function byDay(rows: Row[]): [string, Row[]][] {
   const days = new Map<string, Row[]>();

@@ -18,7 +18,7 @@
   import { q } from "#lib/v2/data.js";
   import { look } from "#lib/v2/look.svelte.js";
   import { money, view } from "#lib/v2/money.svelte.js";
-  import { prettify, splitTitle, toRow } from "#lib/v2/tx.js";
+  import { BLOCKED_TAG, prettify, splitTitle, toRow } from "#lib/v2/tx.js";
   import { dateTime, longDate } from "#lib/v2/when.js";
 
   const id = $derived(page.params.id ?? "");
@@ -39,12 +39,13 @@
   const byTag = $derived.by(() => {
     const map = new Map<string, number>();
     for (const s of row?.splits ?? []) {
-      const key = s.tags?.[0] ?? "untagged";
+      const key = tagsOf(s)[0] ?? "untagged";
       map.set(key, (map.get(key) ?? 0) + valueOf(s));
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   });
 
+  const tagsOf = (split: Split) => (split.tags ?? []).filter((tag) => tag !== BLOCKED_TAG);
   const tagColor = (tag: string) => (tag === "untagged" ? "var(--faint)" : look.of("tag", tag, tag).color);
 
   function accountHref(idValue: string | null | undefined, type: string | null | undefined) {
@@ -139,10 +140,10 @@
         {#each row.splits as split, i (i)}
           {@const sl = split.category_id ? look.of("category", split.category_id, split.category_name ?? "") : null}
           {@const name = row.splits.length > 1 ? splitTitle(split) : prettify(split.description)}
-          {@const tags = (split.tags ?? []).filter((t) => t !== name)}
+          {@const tags = tagsOf(split).filter((t) => t !== name)}
           <div class="split">
             <div class="split-line">
-              {#if tags.length < (split.tags ?? []).length}
+              {#if tags.length < tagsOf(split).length}
                 <a aria-label="All {name}" class="dot-link" href="/tx?tag={encodeURIComponent(name)}"><i class="dot" style:background={tagColor(name)}></i></a>
               {/if}
               <span class="split-tags">

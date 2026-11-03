@@ -10,6 +10,7 @@ import type {
   TransactionGroup,
 } from "#lib/api/types.js";
 import { addDays, today } from "#lib/dates.js";
+import { BLOCKED_TAG } from "./tx.js";
 
 export type AccountX = Account & {
   current_balance?: string;
@@ -63,6 +64,10 @@ export const q = {
         },
       }),
     queryKey: ["v2", "chart", start, end, accounts?.join(",") ?? "assets"],
+  }),
+  blocked: () => ({
+    queryFn: () => all<TransactionGroup>(`/v1/tags/${BLOCKED_TAG}/transactions`).catch(() => []),
+    queryKey: ["v2", "blocked"],
   }),
   transactions: (start: string, end: string) => ({
     queryFn: () => all<TransactionGroup>("/v1/transactions", { end, start, type: "all" }),

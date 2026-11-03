@@ -20,10 +20,12 @@
   import { look } from "#lib/v2/look.svelte.js";
   import { view } from "#lib/v2/money.svelte.js";
   import { rowValue, spendByCategory, totals } from "#lib/v2/stats.js";
-  import { BLOCKADE_TAG, byDay, isBlockade, type Row, signed, toRow } from "#lib/v2/tx.js";
+  import { BLOCKADE_TAG, BLOCKED_TAG, byDay, currentBlockades, isBlockade, type Row, signed, toRow } from "#lib/v2/tx.js";
+  import { today } from "#lib/dates.js";
   import { dayLabel, periodName } from "#lib/v2/when.js";
 
   const txs = createQuery(() => q.transactions(period.start, period.end));
+  const blocked = createQuery(() => q.blocked());
   const accounts = createQuery(() => lists.accounts("all"));
   const categories = createQuery(() => lists.categories());
   const tags = createQuery(() => lists.tags());
@@ -63,7 +65,8 @@
   const loaded = $derived((txs.data ?? []).map(toRow));
   const all = $derived(loaded.filter((row) => !isBlockade(row)));
   const narrowed = $derived(Boolean(fCategory || fTag || fBudget || fBill || search.trim() || (fType && fType !== "withdrawal")));
-  const held = $derived(narrowed ? [] : loaded.filter((row) => isBlockade(row) && (!fAccount || row.accountId === fAccount)));
+  const lump = $derived(narrowed ? [] : loaded.filter((row) => isBlockade(row) && (!fAccount || row.accountId === fAccount)));
+  const held = $derived(narrowed ? [] : currentBlockades(loaded, (blocked.data ?? []).map(toRow), period.start, period.end, today()).filter((row) => !fAccount || row.accountId === fAccount));
 
   function matches(row: Row): boolean {
     if (fAccount && row.accountId !== fAccount && row.otherId !== fAccount) {
@@ -104,7 +107,7 @@
     return () => clearTimeout(id);
   });
   const flat = $derived(days.flatMap(([, list]) => list));
-  const sum = $derived(view.ready ? totals([...rows, ...held]) : { earned: 0, spent: 0 });
+  const sum = $derived(view.ready ? totals([...rows, ...lump]) : { earned: 0, spent: 0 });
   const slices = $derived(view.ready ? spendByCategory(rows).slice(0, 6) : []);
   const tagCounts = $derived.by(() => {
     const map = new Map<string, number>();
@@ -134,7 +137,7 @@
     ...(categories.data ?? []).map((c) => ({ id: c.id, label: c.attributes.name, look: look.of("category", c.id, c.attributes.name) })),
     { id: "none", label: "No category" },
   ]);
-  const tagOptions = $derived((tags.data ?? []).filter((t) => t.attributes.tag !== BLOCKADE_TAG).map((t) => ({ id: t.attributes.tag, label: t.attributes.tag, look: look.of("tag", t.attributes.tag, t.attributes.tag) })));
+  const tagOptions = $derived((tags.data ?? []).filter((t) => t.attributes.tag !== BLOCKADE_TAG && t.attributes.tag !== BLOCKED_TAG).map((t) => ({ id: t.attributes.tag, label: t.attributes.tag, look: look.of("tag", t.attributes.tag, t.attributes.tag) })));
   const budgetOptions = $derived((budgets.data ?? []).map((b) => ({ id: b.id, label: b.attributes.name, look: look.of("budget", b.id, b.attributes.name) })));
   const typeOptions = [
     { id: "withdrawal", label: "Spending" },
