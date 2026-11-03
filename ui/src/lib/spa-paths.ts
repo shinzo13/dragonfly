@@ -1,5 +1,6 @@
 export const SPA_EXACT = [
   "/",
+  "/login",
   "/home",
   "/dashboard",
   "/tx",

@@ -25,13 +25,15 @@
 
 	@ffui_pages {
 		method GET HEAD
-		path / /home /accounts /budgets /categories /tags
-		path /bills /subscriptions /piggy-banks /groups /reports /search
-		path /currencies /exchange-rates /attachments /preferences /export /administrations
-		path /recurring /webhooks/index /settings/links /settings/links/create /accounts/* /inactive-accounts/*
-		path /transactions/* /budgets/* /categories/* /tags/* /bills/* /subscriptions/*
-		path /piggy-banks/* /groups/* /reports/* /currencies/* /exchange-rates/* /attachments/*
-		path /administrations/* /recurring/show/* /webhooks/show/* /settings/links/show/* /settings/links/edit/*
+		path / /login /home /dashboard /tx /acc
+		path /debts /control /stats /sync /accounts /budgets
+		path /categories /tags /bills /subscriptions /piggy-banks /groups
+		path /reports /search /currencies /exchange-rates /attachments /preferences
+		path /export /administrations /recurring /webhooks/index /settings/links /settings/links/create
+		path /tx/* /acc/* /accounts/* /inactive-accounts/* /transactions/* /budgets/*
+		path /categories/* /tags/* /bills/* /subscriptions/* /piggy-banks/* /groups/*
+		path /reports/* /currencies/* /exchange-rates/* /attachments/* /administrations/* /recurring/show/*
+		path /webhooks/show/* /settings/links/show/* /settings/links/edit/*
 		not path /attachments/download/* /attachments/view/* /transactions/convert/* /transactions/debug/* /transactions/link/* /transactions/mass/*
 		not path /transactions/bulk/* /transactions/show-by-journal/* /piggy-banks/add/* /piggy-banks/remove/* /reports/options/*
 		not expression `{query.ffui} in ["off", "old"] || ({cookie.ffui} == "off" && {query.ffui} != "on")`

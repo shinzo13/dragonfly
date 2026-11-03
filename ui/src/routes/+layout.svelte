@@ -15,8 +15,12 @@
   let { children } = $props();
 
   let lastHref = "";
+  const open = $derived(page.url.pathname === "/login");
 
   onMount(async () => {
+    if (open) {
+      return;
+    }
     try {
       const back = await session.boot();
       if (back) {
@@ -65,7 +69,7 @@
 <svelte:window onkeydown={keys.handle} />
 
 <QueryClientProvider client={queryClient}>
-  {#if session.ready && period.ready}
+  {#if open || (session.ready && period.ready)}
     {@render children()}
   {:else if session.failed}
     <main class="grid min-h-dvh place-items-center p-6 text-center">
