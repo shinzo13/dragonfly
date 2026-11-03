@@ -7,7 +7,7 @@ import re
 import threading
 import traceback
 from dataclasses import asdict
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -40,6 +40,7 @@ RATE_LIMITED = 429
 RETRY_UNTIL = "__retry_until"
 NOT_FOUND = 404
 BLOCKADE_TAG = "blockade"
+BLOCKED_TAG = "blockade-item"
 BLOCKADE_TITLE = "Blockades"
 
 
@@ -67,6 +68,18 @@ def retry_until(header: str | None, at: datetime) -> datetime | None:
         if until.tzinfo is None:
             until = until.replace(tzinfo=UTC)
     return until if until > at else None
+
+
+def paid_at(tx: Tx) -> str | None:
+    return tx.at.astimezone(UTC).isoformat(timespec="seconds") if tx.at else None
+
+
+def paid_before(item, moment: datetime) -> bool:
+    if item["at"]:
+        return datetime.fromisoformat(item["at"]) < moment
+    # no time known: the purchase could be as late as the end of its day
+    next_day = date.fromisoformat(item["booked"]) + timedelta(days=1)
+    return datetime.combine(next_day, time.min).astimezone() < moment
 
 
 class Ctx:
@@ -184,6 +197,11 @@ class Core:
         if report.created:
             self._enrich(report.created)
             self._match(report.created)
+        try:
+            self._divide_blockades()
+        except Exception as error:
+            log.warning("[blockades] %s", traceback.format_exc())
+            report.sources.append(SourceResult(source="blockades", ok=False, error=str(error)))
         self._expire()
         for manifest in self.of_kind("hook"):
             if manifest.phase == "before":
@@ -227,7 +245,7 @@ class Core:
             else:
                 for tx in batch.provisional:
                     self._provisional(manifest, tx, result, report)
-            self._blockades(manifest, batch.blockades, result)
+            self._record_blockades(manifest, batch.blockades)
             for balance in batch.balances:
                 self._balance(manifest, ctx, balance, result, report)
             self.store.mark_run(manifest.id, True, batch.cursor)
@@ -291,7 +309,8 @@ class Core:
                     side = "debit" if split["source_id"] == account["firefly_id"] else "credit"
                     payee = split.get("destination_name") if side == "debit" else split.get("source_name")
                     self.store.run(
-                        "insert or ignore into provisional values (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                        """insert or ignore into provisional (firefly_id, source, account, side, amount, payee, booked, external_id)
+                           values (?, ?, ?, ?, ?, ?, ?, ?)""",
                         group["id"],
                         manifest.id,
                         account["firefly_id"],
@@ -436,6 +455,8 @@ class Core:
 
     def _provisional(self, manifest: Manifest, tx: Tx, result: SourceResult, report: RunReport) -> None:
         if self._known(manifest, tx):
+            if tx.at:
+                self.store.run("update provisional set at = ? where external_id = ? and at is null", paid_at(tx), tx.external_id)
             result.skipped += 1
             return
         account_id = self._account(manifest, tx.account)
@@ -458,7 +479,8 @@ class Core:
                 "insert or replace into written values (?, ?, ?, ?)", (tx.external_id, firefly_id, manifest.id, now())
             )
             db.execute(
-                "insert or replace into provisional values (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                """insert or replace into provisional (firefly_id, source, account, side, amount, payee, booked, external_id, at)
+                   values (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     firefly_id,
                     manifest.id,
@@ -468,6 +490,7 @@ class Core:
                     tx.payee,
                     tx.booked.isoformat(),
                     tx.external_id,
+                    paid_at(tx),
                 ),
             )
         report.created.append(Stored(tx=tx, source=manifest.id, firefly_id=firefly_id, provisional=True))
@@ -499,54 +522,109 @@ class Core:
                 db.execute("delete from provisional where firefly_id = ?", (row["firefly_id"],))
                 db.execute("delete from written where firefly_id = ?", (row["firefly_id"],))
 
-    def _blockades(self, manifest: Manifest, blockades: list[Blockade], result: SourceResult) -> None:
-        current = {row["account"]: row for row in self.store.all("select * from blockades where source = ?", manifest.id)}
-        booked = date.today()
-        for blockade in blockades:
-            if blockade.amount <= 0:
-                continue
-            row = current.pop(blockade.account, None)
-            tx = Tx(
-                external_id=f"{manifest.id}:blockade:{blockade.account}",
-                account=blockade.account,
-                side="debit",
-                amount=blockade.amount,
-                currency=blockade.currency,
-                booked=booked,
-                payee=BLOCKADE_TITLE,
-                description=BLOCKADE_TITLE,
-                splits=[Split(amount=blockade.amount, description=BLOCKADE_TITLE, tags=[BLOCKADE_TAG])],
+    def _record_blockades(self, manifest: Manifest, blockades: list[Blockade]) -> None:
+        held = {b.account: b for b in blockades if b.amount > 0}
+        for row in self.store.all("select account from blockades where source = ?", manifest.id):
+            if row["account"] not in held:
+                self.store.run("update blockades set held = '0' where source = ? and account = ?", manifest.id, row["account"])
+        for blockade in held.values():
+            self._account(manifest, blockade.account)
+            self.store.run(
+                """insert into blockades (source, account, firefly_id, amount, booked, held, at, currency)
+                   values (?, ?, '', '0', ?, ?, ?, ?)
+                   on conflict(source, account) do update set held = excluded.held, at = excluded.at, currency = excluded.currency""",
+                manifest.id,
+                blockade.account,
+                date.today().isoformat(),
+                str(blockade.amount.normalize()),
+                now(),
+                blockade.currency,
             )
-            if row and Decimal(row["amount"]) == tx.amount and row["booked"] == booked.isoformat():
-                result.skipped += 1
+
+    def _divide_blockades(self) -> None:
+        for row in self.store.all("select * from provisional where blocked = 1 and open = 0"):
+            self._set_blocked(row, False)
+        for row in self.store.all("select * from blockades"):
+            manifest = self.manifest(row["source"])
+            if manifest:
+                self._divide_blockade(manifest, row)
+
+    def _divide_blockade(self, manifest: Manifest, row) -> None:
+        # the newest receipts first: an older one is the likelier to be booked by now
+        rest = Decimal(row["held"])
+        synced = datetime.fromisoformat(row["at"]) if row["at"] else None
+        for item in self.store.all(
+            """select * from provisional where open = 1 and side = 'debit' and account = ? and source != ?
+               order by booked desc, rowid desc""",
+            self._account(manifest, row["account"]),
+            manifest.id,
+        ):
+            if self._replaced(item):
                 continue
-            firefly_id = row["firefly_id"] if row else None
+            amount = Decimal(item["amount"])
+            blocked = bool(synced) and paid_before(item, synced) and amount <= rest
+            if blocked:
+                rest -= amount
+            if blocked != bool(item["blocked"]):
+                self._set_blocked(item, blocked)
+        self._write_lump(manifest, row, rest)
+
+    def _set_blocked(self, item, blocked: bool) -> None:
+        try:
+            self.firefly.set_tag(item["firefly_id"], BLOCKED_TAG, blocked)
+        except FireflyError as error:
+            if error.status != NOT_FOUND:
+                raise
+            self.store.run("update provisional set open = 0, blocked = 0 where firefly_id = ?", item["firefly_id"])
+            return
+        self.store.run("update provisional set blocked = ? where firefly_id = ?", int(blocked), item["firefly_id"])
+
+    def _write_lump(self, manifest: Manifest, row, amount: Decimal) -> None:
+        key = (row["source"], row["account"])
+        firefly_id = row["firefly_id"]
+        if amount <= 0:
             if firefly_id:
                 try:
-                    self.firefly.reprice(firefly_id, tx)
-                    result.settled += 1
+                    self.firefly.delete(firefly_id)
                 except FireflyError as error:
                     if error.status != NOT_FOUND:
                         raise
-                    firefly_id = None
-            if not firefly_id:
-                firefly_id = self.firefly.create(tx, self._account(manifest, tx.account))
-                result.created += 1
-            self.store.run(
-                "insert or replace into blockades values (?, ?, ?, ?, ?)",
-                manifest.id,
-                blockade.account,
-                firefly_id,
-                str(tx.amount.normalize()),
-                booked.isoformat(),
-            )
-        for row in current.values():
+            if Decimal(row["held"]) > 0:
+                self.store.run("update blockades set firefly_id = '', amount = '0' where source = ? and account = ?", *key)
+            else:
+                self.store.run("delete from blockades where source = ? and account = ?", *key)
+            return
+        booked = date.today()
+        if firefly_id and Decimal(row["amount"]) == amount and row["booked"] == booked.isoformat():
+            return
+        account_id = self._account(manifest, row["account"])
+        tx = Tx(
+            external_id=f"{manifest.id}:blockade:{row['account']}",
+            account=row["account"],
+            side="debit",
+            amount=amount,
+            currency=row["currency"] or self.firefly.account_currency(account_id),
+            booked=booked,
+            payee=BLOCKADE_TITLE,
+            description=BLOCKADE_TITLE,
+            splits=[Split(amount=amount, description=BLOCKADE_TITLE, tags=[BLOCKADE_TAG])],
+        )
+        if firefly_id:
             try:
-                self.firefly.delete(row["firefly_id"])
+                self.firefly.reprice(firefly_id, tx)
             except FireflyError as error:
                 if error.status != NOT_FOUND:
                     raise
-            self.store.run("delete from blockades where source = ? and account = ?", manifest.id, row["account"])
+                firefly_id = ""
+        if not firefly_id:
+            firefly_id = self.firefly.create(tx, account_id)
+        self.store.run(
+            "update blockades set firefly_id = ?, amount = ?, booked = ? where source = ? and account = ?",
+            firefly_id,
+            str(amount.normalize()),
+            booked.isoformat(),
+            *key,
+        )
 
     def _balance(self, manifest: Manifest, ctx: Ctx, balance: Balance, result: SourceResult, report: RunReport) -> None:
         account_id = self._account(manifest, balance.account)

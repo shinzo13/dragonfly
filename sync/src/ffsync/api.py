@@ -44,6 +44,7 @@ class Tx:
     notes: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
     attachments: list[Attachment] = field(default_factory=list)
+    at: datetime | None = None  # when it was paid, if the source knows the time
 
 
 @dataclass

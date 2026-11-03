@@ -225,6 +225,13 @@ class Firefly:
     def set_category(self, firefly_id: str, category: str) -> None:
         self._update_splits(firefly_id, lambda j: {"category_name": category})
 
+    def set_tag(self, firefly_id: str, tag: str, on: bool) -> None:
+        def change(j: dict[str, Any]) -> dict[str, Any]:
+            others = [t for t in j.get("tags") or [] if t != tag]
+            return {"tags": [*others, tag] if on else others}
+
+        self._update_splits(firefly_id, change)
+
     def reprice(self, firefly_id: str, tx) -> None:
         self._update_splits(
             firefly_id,

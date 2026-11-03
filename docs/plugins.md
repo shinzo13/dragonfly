@@ -309,6 +309,14 @@ Batch(final=final, blockades=[Blockade(account="main", amount=held, currency="PL
 
 The core keeps one Firefly withdrawal per account, dated today and tagged `blockade`, so balances and spending stay right. `blockades` is the source's whole current set: a changed amount updates the transaction, and an account missing from the batch has its transaction deleted. The UI leaves these transactions out of lists and category breakdowns and shows their sum separately. With no blockades, nothing is shown.
 
+Open provisionals of other sources on that account, such as receipts, explain part of the total. After every run the core compares each one with the time of the blockade source's last sync, newest first:
+
+- Paid after the sync: the bank could not know it yet, so it stays an ordinary provisional.
+- Paid before the sync and fits in what is left of the total: it is the blockade. It stays in the lists, gets the tag `blockade-item`, and its amount comes off the withdrawal. When nothing is left, the withdrawal is deleted.
+- Paid before the sync but larger than what is left: it stays an ordinary provisional.
+
+When a final settles it, the tag goes away. Set `Tx.at` with a timezone so the core knows the time. Without it the purchase counts as made at the end of `booked`.
+
 ## Receipts
 
 A provisional that is the same purchase as something already stored on that account is laid over it instead of being created again. Two cases, checked in order:

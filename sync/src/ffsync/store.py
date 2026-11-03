@@ -24,7 +24,9 @@ create table if not exists provisional (
   payee text not null,
   booked text not null,
   external_id text not null,
-  open integer not null default 1
+  open integer not null default 1,
+  at text,
+  blocked integer not null default 0
 );
 create index if not exists provisional_open on provisional(source, account, open);
 create table if not exists blockades (
@@ -33,6 +35,9 @@ create table if not exists blockades (
   firefly_id text not null,
   amount text not null,
   booked text not null,
+  held text not null default '0',
+  at text,
+  currency text,
   primary key (source, account)
 );
 create table if not exists runs (
@@ -106,7 +111,21 @@ class Store:
         if self.db.execute("select 1 from sqlite_master where name = 'seen_transfer'").fetchone():
             # seen_transfer only knew transfers; drop it and let every source seed again into seen_loose
             self.db.executescript("drop table seen_transfer; delete from settings where key = '__seeded';")
+        if "blocked" not in self._columns("provisional"):
+            self.db.executescript(
+                "alter table provisional add column at text; alter table provisional add column blocked integer not null default 0;"
+            )
+        if "held" not in self._columns("blockades"):
+            self.db.executescript(
+                """alter table blockades add column held text not null default '0';
+                   alter table blockades add column at text;
+                   alter table blockades add column currency text;
+                   update blockades set held = amount, at = (select last_ok from cursors where cursors.source = blockades.source);"""
+            )
         self.lock = threading.RLock()
+
+    def _columns(self, table: str) -> set[str]:
+        return {row["name"] for row in self.db.execute(f"pragma table_info({table})")}
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
